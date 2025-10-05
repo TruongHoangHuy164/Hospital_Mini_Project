@@ -17,7 +17,7 @@ export default function DoctorLayout() {
             <Link to="/" className="navbar-brand my-3"><i className="bi bi-hospital"></i> Hospital</Link>
             <ul className="nav nav-pills flex-column mb-auto w-100">
               <li className="nav-item"><Link to="/doctor/dashboard" className="nav-link">Khám bệnh</Link></li>
-              <li className="nav-item"><Link to="/doctor/schedule" className="nav-link">Lịch làm việc</Link></li>
+              <li className="nav-item"><Link to="/doctor/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item"><Link to="/doctor/profile" className="nav-link">Hồ sơ cá nhân</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>

@@ -124,7 +124,7 @@ export default function App() {
 
       <Route path="/doctor" element={<RequireDoctor><DoctorLayout /></RequireDoctor>}>
         <Route path="dashboard" element={<DoctorDashboard />} />
-        <Route path="schedule" element={<DoctorSchedulePage />} />
+        <Route path="my-schedule" element={<MySchedule />} />
         <Route path="profile" element={<DoctorProfile />} />
       </Route>
 

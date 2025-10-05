@@ -5,6 +5,7 @@ import { fetchUsers } from '../../../api/users';
 import { toast } from 'react-toastify';
 import { fetchNextScheduleConfig, updateNextScheduleConfig } from '../../../api/scheduleConfig';
 import { useAuth } from '../../../context/AuthContext';
+import { autoGenerateSchedules } from '../../../api/autoSchedule';
 
 const roles = ['doctor','reception','lab','cashier','nurse'];
 const shifts = ['sang','chieu','toi'];
@@ -63,6 +64,24 @@ export default function AdminWorkSchedulesPage(){
   const [config, setConfig] = useState(null); // { month, openFrom, note }
   const [configLoading, setConfigLoading] = useState(false);
   const [newOpenFrom, setNewOpenFrom] = useState('');
+  // Auto-generate state
+  const [autoRoles, setAutoRoles] = useState(['doctor']);
+  const [autoDryRunResult, setAutoDryRunResult] = useState(null); // { month, generated, summaries }
+  const [autoLoading, setAutoLoading] = useState(false);
+  const [autoReplaceExisting, setAutoReplaceExisting] = useState(false);
+
+  function toggleAutoRole(r){
+    setAutoRoles(prev=> prev.includes(r) ? prev.filter(x=> x!==r) : [...prev, r]);
+  }
+  async function runAutoGenerate(dryRun){
+    try{
+      setAutoLoading(true);
+      const res = await autoGenerateSchedules({ dryRun, replaceExisting: autoReplaceExisting, roles: autoRoles });
+      if(dryRun){ setAutoDryRunResult(res); toast.success('Dry run thành công'); }
+      else { setAutoDryRunResult(res); toast.success('Đã áp dụng lịch tự động'); await load(); }
+    }catch(err){ toast.error(err?.response?.data?.message || 'Auto-generate lỗi'); }
+    finally{ setAutoLoading(false); }
+  }
 
   async function loadConfig(){
     try {
@@ -329,6 +348,66 @@ export default function AdminWorkSchedulesPage(){
               <button className="btn btn-primary" onClick={applyBulk}>Áp dụng</button>
               <button className="btn btn-outline-secondary" onClick={()=> setBulkDays({})}>Reset ngày</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {user?.role === 'admin' && (
+        <div className="card mb-3">
+          <div className="card-body small">
+            <h5 className="mb-2">Tự động sinh lịch tháng kế tiếp</h5>
+            <div className="mb-2">Chọn role để sinh:</div>
+            <div className="d-flex flex-wrap gap-2 mb-3">
+              {roles.map(r=> (
+                <label key={r} className="form-check me-3">
+                  <input type="checkbox" className="form-check-input me-1" checked={autoRoles.includes(r)} onChange={()=> toggleAutoRole(r)} /> {r}
+                </label>
+              ))}
+            </div>
+            <div className="form-check form-switch mb-3">
+              <input className="form-check-input" type="checkbox" id="replaceExistingSwitch" checked={autoReplaceExisting} onChange={()=> setAutoReplaceExisting(v=> !v)} />
+              <label className="form-check-label" htmlFor="replaceExistingSwitch">Xóa lịch cũ tháng kế tiếp trước khi áp dụng (replaceExisting)</label>
+            </div>
+            <div className="d-flex gap-2 mb-3 flex-wrap">
+              <button disabled={autoLoading || !autoRoles.length} className="btn btn-outline-primary btn-sm" onClick={()=> runAutoGenerate(true)}>
+                {autoLoading ? 'Đang chạy...' : 'Dry Run'}
+              </button>
+              <button disabled={autoLoading || !autoRoles.length || !autoDryRunResult} className="btn btn-primary btn-sm" onClick={()=> runAutoGenerate(false)}>
+                {autoLoading ? 'Đang áp dụng...' : 'Áp dụng'}
+              </button>
+              {!autoDryRunResult && <span className="text-muted align-self-center">(Chạy Dry Run trước để xem kết quả)</span>}
+            </div>
+            {autoDryRunResult && (
+              <div>
+                <h6>Kết quả: tháng {autoDryRunResult.month}</h6>
+                <p className="mb-1">Tổng bản ghi sinh ra: {autoDryRunResult.generated}</p>
+                <p className="mb-2">{autoDryRunResult.dryRun ? 'Chưa áp dụng (dryRun)':'ĐÃ ghi vào DB'}</p>
+                <div className="table-responsive" style={{maxHeight:300}}>
+                  <table className="table table-sm table-bordered">
+                    <thead className="table-light">
+                      <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Tổng ca</th>
+                        <th>Ca tối/Trực</th>
+                        <th>Ngày làm</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {autoDryRunResult.summaries?.map(s=> (
+                        <tr key={s.userId + s.role}>
+                          <td>{s.userId?.slice?.(-6) || s.userId}</td>
+                          <td>{s.role}</td>
+                          <td>{s.totalShifts}</td>
+                          <td>{s.nightShifts}</td>
+                          <td>{s.daysWorked}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

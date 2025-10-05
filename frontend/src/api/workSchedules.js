@@ -41,3 +41,8 @@ export async function fetchWorkScheduleStats(month, role){
   const { data } = await privateApi.get(`/work-schedules/stats/summary?${params.toString()}`);
   return data;
 }
+
+export async function resetMyNextMonthSchedule(){
+  const { data } = await privateApi.delete('/work-schedules/me/next');
+  return data;
+}

@@ -168,6 +168,8 @@ All endpoints require `Authorization: Bearer <token>`.
 | POST | `/api/work-schedules/bulk` | admin | Bulk upsert nhiều lịch |
 | GET | `/api/work-schedules/stats/summary?month=YYYY-MM&role=doctor` | admin | Thống kê số ca theo `shiftType` |
 | GET | `/api/work-schedules/me/self?month=YYYY-MM` | doctor/reception/lab/cashier/nurse | Xem lịch cá nhân trong 1 tháng |
+| POST | `/api/work-schedules/auto-generate` | admin | Tự động sinh lịch tháng kế tiếp |
+| DELETE | `/api/work-schedules/me/next` | user (self) / admin | Xóa toàn bộ lịch tháng kế tiếp của user hiện tại (admin có thể thêm ?userId=) |
 
 ### Tạo 1 lịch
 
@@ -209,6 +211,43 @@ Response: `{ ok: true, upserted: <n>, modified: <n> }`
 	- `PUT /api/work-schedules/config/next { openFrom, note }`
 	- Nếu chưa cấu hình: fallback mặc định ngày 15 tháng hiện tại.
 	- Người dùng thường chỉ thao tác khi `today >= openFrom`.
+
+### Tự động sinh lịch (Auto Generate)
+
+Endpoint:
+```
+POST /api/work-schedules/auto-generate
+Body: {
+	"dryRun": true,              // mặc định true: chỉ xem trước, không ghi DB
+	"replaceExisting": false,    // nếu dryRun=false: xóa lịch tháng kế tiếp cũ trước khi tạo
+	"roles": ["doctor","nurse"] // (tùy chọn) chỉ sinh cho các role chỉ định
+}
+```
+
+Response ví dụ:
+```
+{
+	"month": "2025-11",
+	"generated": 180,
+	"applied": 0,
+	"dryRun": true,
+	"replaceExisting": false,
+	"summaries": [
+		{ "userId": "...", "role": "doctor", "totalShifts": 28, "nightShifts": 2, "daysWorked": 20 },
+		{ "userId": "...", "role": "nurse",  "totalShifts": 40, "nightShifts": 5, "daysWorked": 22 }
+	]
+}
+```
+
+Logic tóm tắt (heuristic):
+- Doctor: Phân ca sáng/chiều theo vòng tròn; một số ngày (Thứ 4/6) full-day 2 ca cùng bác sĩ; Thứ 7 có thêm ca tối trực luân phiên.
+- Nurse: Pattern cố định 4 ngày (sáng + chiều) + 1 tối trực + 1 off lặp lại.
+- Reception/Cashier/Lab: Mỗi ngày 1 ca sáng xoay vòng nhân sự (có thể mở rộng sau).
+- Night shift (`shift = toi`, `shiftType = truc`) được tính thêm, có thể cải tiến quy tắc nghỉ bù sau.
+
+Tham số `replaceExisting=true` sẽ xóa các record của tháng kế tiếp trước khi upsert (chỉ dùng khi chắc chắn). Upsert tránh trùng `(userId, day, shift)`.
+
+Khuyến nghị: chạy `dryRun` trước để xem thống kê cân bằng ca.
 
 ### Lấy lịch tháng cá nhân
 

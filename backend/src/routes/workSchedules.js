@@ -2,6 +2,7 @@ const express = require('express');
 const WorkSchedule = require('../models/WorkSchedule');
 const User = require('../models/User');
 const ScheduleConfig = require('../models/ScheduleConfig');
+const { generateAutoSchedule } = require('../services/autoScheduler');
 
 const router = express.Router();
 
@@ -214,6 +215,22 @@ router.get('/me/self', async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
+// DELETE /api/work-schedules/me/next  -> xóa toàn bộ lịch tháng kế tiếp của user hiện tại
+router.delete('/me/next', async (req,res,next)=>{
+  try {
+    const userId = req.user?.id;
+    if(!userId) return res.status(401).json({ message: 'Unauthorized' });
+    // Only non-admin can only delete their own; admin could pass ?userId= for specific user (optional extension)
+    const targetUserId = req.user.role === 'admin' && req.query.userId ? req.query.userId : userId;
+    const nextMonth = getNextMonthYearMonth();
+    const start = `${nextMonth}-01`;
+    // compute exclusive end using monthRange
+    const range = monthRange(nextMonth);
+    await WorkSchedule.deleteMany({ userId: targetUserId, day: { $gte: range.start, $lt: range.end } });
+    res.json({ ok: true });
+  } catch(err){ next(err); }
+});
+
 module.exports = router;
 // ===== Config endpoints (admin only should be enforced at app level authorize) =====
 // GET /api/work-schedules/config/next -> current config for next month
@@ -243,5 +260,36 @@ router.put('/config/next', async (req,res,next)=>{
       { new: true, upsert: true }
     );
     res.json(cfg);
+  } catch(err){ next(err); }
+});
+
+// POST /api/work-schedules/auto-generate { dryRun=true, replaceExisting=false }
+router.post('/auto-generate', async (req,res,next)=>{
+  try {
+    if(req.user.role !== 'admin') return res.status(403).json({ message: 'Chỉ admin thực hiện auto-generate' });
+    const yearMonth = getNextMonthYearMonth();
+    const { dryRun = true, replaceExisting = false, roles } = req.body || {};
+    // Fetch users grouped by role (only target specific roles if provided)
+    const roleFilter = roles && Array.isArray(roles) && roles.length ? { role: { $in: roles } } : { role: { $in: ['doctor','reception','lab','cashier','nurse'] } };
+    const users = await User.find(roleFilter).select('_id role');
+    const usersByRole = {};
+    for(const u of users){
+      if(!usersByRole[u.role]) usersByRole[u.role] = [];
+      usersByRole[u.role].push(u);
+    }
+    const { entries, summaries } = await generateAutoSchedule({ yearMonth, usersByRole });
+    if(!dryRun){
+      // Optionally remove existing next-month schedules before inserting
+      if(replaceExisting){
+        const prefix = yearMonth;
+        await WorkSchedule.deleteMany({ day: { $gte: `${prefix}-01`, $lt: `${prefix}-31` } });
+      }
+      if(entries.length){
+        // Upsert logic: avoid duplicates if some exist
+        const ops = entries.map(e=> ({ updateOne: { filter: { userId: e.userId, day: e.day, shift: e.shift }, update: { $set: e }, upsert: true } }));
+        await WorkSchedule.bulkWrite(ops, { ordered: false });
+      }
+    }
+    res.json({ month: yearMonth, generated: entries.length, applied: dryRun ? 0 : entries.length, dryRun, replaceExisting, summaries });
   } catch(err){ next(err); }
 });
