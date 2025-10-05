@@ -17,6 +17,7 @@ export default function LabLayout() {
               <li className="nav-item"><Link to="/lab/orders" className="nav-link">Tiếp nhận chỉ định</Link></li>
               <li className="nav-item"><Link to="/lab/perform" className="nav-link">Thực hiện/Xử lý</Link></li>
               <li className="nav-item"><Link to="/lab/results" className="nav-link">Nhập & Trả kết quả</Link></li>
+              <li className="nav-item"><Link to="/lab/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>
           </div>

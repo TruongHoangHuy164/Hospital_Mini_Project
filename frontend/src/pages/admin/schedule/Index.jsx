@@ -3,6 +3,8 @@ import './schedule.css';
 import { fetchWorkSchedules, createWorkSchedule, updateWorkSchedule, deleteWorkSchedule, bulkUpsertWorkSchedules, fetchWorkScheduleStats } from '../../../api/workSchedules';
 import { fetchUsers } from '../../../api/users';
 import { toast } from 'react-toastify';
+import { fetchNextScheduleConfig, updateNextScheduleConfig } from '../../../api/scheduleConfig';
+import { useAuth } from '../../../context/AuthContext';
 
 const roles = ['doctor','reception','lab','cashier','nurse'];
 const shifts = ['sang','chieu','toi'];
@@ -42,6 +44,7 @@ const NEXT_MONTH_BASE = getNextMonthBase();
 const NEXT_MONTH_STR = formatMonth(NEXT_MONTH_BASE);
 
 export default function AdminWorkSchedulesPage(){
+  const { user } = useAuth();
   const [monthDate, setMonthDate] = useState(()=> NEXT_MONTH_BASE);
   const [monthStr, setMonthStr] = useState(NEXT_MONTH_STR);
   const [loading, setLoading] = useState(false);
@@ -56,6 +59,33 @@ export default function AdminWorkSchedulesPage(){
   // bulk shifts multi-select
   const [bulkShifts, setBulkShifts] = useState(['sang']);
   const [bulkDays, setBulkDays] = useState({}); // map day->bool
+  const [windowOpen, setWindowOpen] = useState(false);
+  const [config, setConfig] = useState(null); // { month, openFrom, note }
+  const [configLoading, setConfigLoading] = useState(false);
+  const [newOpenFrom, setNewOpenFrom] = useState('');
+
+  async function loadConfig(){
+    try {
+      setConfigLoading(true);
+      const cfg = await fetchNextScheduleConfig();
+      setConfig(cfg);
+      setNewOpenFrom(cfg.openFrom);
+      const todayStr = new Date().toISOString().slice(0,10);
+      setWindowOpen(user?.role === 'admin' ? true : (todayStr >= cfg.openFrom));
+    } catch { /* ignore */ } finally { setConfigLoading(false); }
+  }
+  useEffect(()=>{ loadConfig(); }, []);
+
+  // realtime poll every minute to auto-open when reach openFrom
+  useEffect(()=>{
+    const id = setInterval(()=>{
+      if(!config) return;
+      if(user?.role === 'admin'){ setWindowOpen(true); return; }
+      const todayStr = new Date().toISOString().slice(0,10);
+      setWindowOpen(todayStr >= config.openFrom);
+    }, 60000);
+    return ()=> clearInterval(id);
+  },[config, user]);
 
   // derive days array
   const days = useMemo(()=> daysInMonth(monthDate), [monthDate]);
@@ -106,6 +136,7 @@ export default function AdminWorkSchedulesPage(){
   }
 
   async function handleCellClick(userId, dayDate, shift, event){
+  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     const cell = getCell(userId, dayDate, shift);
     if(event && (event.ctrlKey || event.metaKey || event.altKey)){
       // quick cycle
@@ -127,6 +158,7 @@ export default function AdminWorkSchedulesPage(){
   }
 
   async function saveCell(shiftType){
+  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     const { userId, day, shift, existing } = editingCell;
   const payloadBase = { userId, role: selectedRole, day: localDateStr(day), shift, shiftType };
     try {
@@ -142,6 +174,7 @@ export default function AdminWorkSchedulesPage(){
   }
 
   async function clearCell(){
+  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     const { existing } = editingCell || {};
     if(existing){
       try{ await deleteWorkSchedule(existing._id); setData(prev=> prev.filter(r=> r._id !== existing._id)); }
@@ -161,6 +194,7 @@ export default function AdminWorkSchedulesPage(){
   }
 
   async function applyBulk(){
+  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     if(!bulkSelectedUser) return toast.error('Chọn user');
     if(!bulkShifts.length) return toast.error('Chọn ít nhất 1 ca');
   const dayList = Object.entries(bulkDays).filter(([k,v])=>v).map(([dayStr])=> dayStr);
@@ -183,7 +217,31 @@ export default function AdminWorkSchedulesPage(){
   return (
     <div>
   <h2 className="mb-1">Lịch làm việc ({selectedRole})</h2>
-  <div className="text-muted small mb-2">Chỉ được đăng ký và chỉnh sửa cho tháng kế tiếp: {NEXT_MONTH_STR}</div>
+  <div className="text-muted small mb-2">
+    Tháng đang quản lý: {NEXT_MONTH_STR}. {configLoading && 'Đang tải cấu hình...'}
+    {!configLoading && config && (
+      <>
+        <span className="ms-2">Ngày mở: <strong>{config.openFrom}</strong></span>
+        <span className="ms-2">Trạng thái: {windowOpen? 'MỞ':'KHÓA'}</span>
+        {user?.role === 'admin' && (
+          <span className="ms-2 text-primary">(Admin luôn có quyền chỉnh)</span>
+        )}
+      </>
+    )}
+  </div>
+  {user?.role === 'admin' && config && (
+    <div className="card mb-3 p-2 small">
+      <div className="d-flex flex-wrap align-items-end gap-2">
+        <div>
+          <label className="form-label mb-0">Ngày mở đăng ký</label>
+          <input type="date" className="form-control form-control-sm" value={newOpenFrom} onChange={e=> setNewOpenFrom(e.target.value)} />
+        </div>
+        <button className="btn btn-sm btn-primary mt-3" disabled={!newOpenFrom || newOpenFrom===config.openFrom} onClick={async()=>{
+          try { const updated = await updateNextScheduleConfig({ openFrom: newOpenFrom }); setConfig(updated); toast.success('Đã cập nhật'); loadConfig(); } catch(err){ toast.error(err?.response?.data?.message || 'Lỗi cập nhật'); }
+        }}>Lưu ngày mở</button>
+      </div>
+    </div>
+  )}
       <div className="d-flex flex-wrap align-items-center gap-3 mb-2 small">
   <div className="d-flex align-items-center gap-1"><span className="badge text-bg-primary">&nbsp;</span> <span>Làm</span></div>
         <div className="d-flex align-items-center gap-1"><span className="badge text-bg-warning">&nbsp;</span> <span>Trực</span></div>

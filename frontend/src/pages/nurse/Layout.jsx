@@ -15,6 +15,7 @@ export default function NurseLayout() {
             <ul className="nav nav-pills flex-column mb-auto w-100">
               <li className="nav-item"><Link to="/nurse/dashboard" className="nav-link">Bảng điều khiển</Link></li>
               <li className="nav-item"><Link to="/nurse/patients-today" className="nav-link">Bệnh nhân trong ngày</Link></li>
+              <li className="nav-item"><Link to="/nurse/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>
           </div>

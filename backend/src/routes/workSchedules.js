@@ -1,6 +1,7 @@
 const express = require('express');
 const WorkSchedule = require('../models/WorkSchedule');
 const User = require('../models/User');
+const ScheduleConfig = require('../models/ScheduleConfig');
 
 const router = express.Router();
 
@@ -44,6 +45,30 @@ function assertNextMonth(dayStr){
   }
 }
 
+// Ensure current date is on/after 15th of current month before allowing next-month modifications
+// Fetch config for next month; if not present fallback to 15th rule
+async function ensureWindowOpenForUser(){
+  // Admin always allowed
+  if(thisReqUserRole() === 'admin') return;
+  const nextMonth = getNextMonthYearMonth();
+  const cfg = await ScheduleConfig.findOne({ month: nextMonth });
+  const todayStr = new Date().toISOString().slice(0,10);
+  // Fallback: 15th of the CURRENT month (consistent with GET /config/next)
+  const currentMonthPrefix = new Date().toISOString().slice(0,7);
+  let openFrom = `${currentMonthPrefix}-15`;
+  if(cfg) openFrom = cfg.openFrom;
+  if(todayStr < openFrom){
+    const err = new Error(`Chưa mở đăng ký. Mở từ: ${openFrom}`);
+    err.status = 400;
+    throw err;
+  }
+}
+
+// Hacky accessor to current request user role via closure injection later
+let _reqUser = null;
+function setReqUser(u){ _reqUser = u; }
+function thisReqUserRole(){ return _reqUser?.role; }
+
 // GET /api/work-schedules?month=YYYY-MM&role=&userId=
 // Trả về danh sách lịch của 1 tháng theo role hoặc user cụ thể
 router.get('/', async (req, res, next) => {
@@ -62,6 +87,7 @@ router.get('/', async (req, res, next) => {
 // POST /api/work-schedules - tạo 1 lịch
 router.post('/', async (req, res, next) => {
   try {
+    setReqUser(req.user);
   const { userId, role, day, shift, shiftType='lam_viec', clinicId, reason, note, meta } = req.body || {};
     if(!userId || !role || !day || !shift) return res.status(400).json({ message: 'Thiếu trường bắt buộc' });
     if(!['doctor','reception','lab','cashier','nurse'].includes(role)) return res.status(400).json({ message: 'role không hợp lệ' });
@@ -70,9 +96,13 @@ router.post('/', async (req, res, next) => {
   if(!isDayStr(day)) return res.status(400).json({ message: 'day không hợp lệ' });
     // Enforce next month restriction
     try { assertNextMonth(day); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+  try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
     const user = await User.findById(userId).select('role');
     if(!user) return res.status(404).json({ message: 'User không tồn tại' });
     if(user.role !== role) return res.status(400).json({ message: 'role không khớp với user' });
+    if(req.user.role !== 'admin' && req.user.id !== String(userId)){
+      return res.status(403).json({ message: 'Chỉ được đăng ký lịch cho chính mình' });
+    }
   const doc = await WorkSchedule.create({ userId, role, day, shift, shiftType, clinicId, reason, note, meta });
     res.status(201).json(doc);
   } catch(err){
@@ -84,6 +114,7 @@ router.post('/', async (req, res, next) => {
 // PUT /api/work-schedules/:id
 router.put('/:id', async (req, res, next) => {
   try {
+    setReqUser(req.user);
     const allow = ['shift','shiftType','clinicId','reason','note','meta','day'];
     const body = req.body || {};
     const update = {};
@@ -96,6 +127,10 @@ router.put('/:id', async (req, res, next) => {
     if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
     const targetDay = update.day || existing.day;
     try { assertNextMonth(targetDay); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+  try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+    if(req.user.role !== 'admin' && existing.userId !== req.user.id){
+      return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
+    }
     const doc = await WorkSchedule.findByIdAndUpdate(req.params.id, update, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy' });
     res.json(doc);
@@ -108,8 +143,14 @@ router.put('/:id', async (req, res, next) => {
 // DELETE /api/work-schedules/:id
 router.delete('/:id', async (req, res, next) => {
   try {
+    setReqUser(req.user);
+    const existing = await WorkSchedule.findById(req.params.id);
+    if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
+  try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+    if(req.user.role !== 'admin' && existing.userId !== req.user.id){
+      return res.status(403).json({ message: 'Không được xóa lịch của người khác' });
+    }
     const r = await WorkSchedule.findByIdAndDelete(req.params.id);
-    if(!r) return res.status(404).json({ message: 'Không tìm thấy' });
     res.json({ ok: true });
   } catch(err){ return next(err); }
 });
@@ -118,16 +159,20 @@ router.delete('/:id', async (req, res, next) => {
 // body: { items: [ { userId, role, day, shift, shiftType, clinicId, reason, note, meta } ], upsert=true }
 router.post('/bulk', async (req, res, next) => {
   try {
+    setReqUser(req.user);
     const { items, upsert = true } = req.body || {};
     if(!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'items trống' });
     const ops = [];
     const allowedMonth = getNextMonthYearMonth();
+    const isAdmin = req.user.role === 'admin';
     for(const it of items){
       if(!it.userId || !it.role || !it.day || !it.shift) continue;
       if(!['doctor','reception','lab','cashier','nurse'].includes(it.role)) continue;
       if(!['sang','chieu','toi'].includes(it.shift)) continue;
   if(!isDayStr(it.day)) continue;
       if(it.day.slice(0,7) !== allowedMonth) return res.status(400).json({ message: `Tất cả day phải thuộc tháng tiếp theo (${allowedMonth})` });
+  try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+      if(!isAdmin && it.userId !== req.user.id) return res.status(403).json({ message: 'Không được bulk lịch cho người khác' });
   const doc = { ...it };
       if(doc.shiftType && !['lam_viec','truc','nghi'].includes(doc.shiftType)) doc.shiftType='lam_viec';
       ops.push({ updateOne: { filter: { userId: doc.userId, day: doc.day, shift: doc.shift }, update: { $set: doc }, upsert } });
@@ -170,3 +215,33 @@ router.get('/me/self', async (req, res, next) => {
 });
 
 module.exports = router;
+// ===== Config endpoints (admin only should be enforced at app level authorize) =====
+// GET /api/work-schedules/config/next -> current config for next month
+router.get('/config/next', async (req,res,next)=>{
+  try {
+    const nextMonth = getNextMonthYearMonth();
+    const cfg = await ScheduleConfig.findOne({ month: nextMonth });
+    res.json(cfg || { month: nextMonth, openFrom: `${new Date().toISOString().slice(0,7)}-15`, note: 'default (fallback)' });
+  } catch(err){ next(err); }
+});
+
+// PUT /api/work-schedules/config/next { openFrom, note }
+router.put('/config/next', async (req,res,next)=>{
+  try {
+    if(req.user.role !== 'admin') return res.status(403).json({ message: 'Chỉ admin cấu hình' });
+    const nextMonth = getNextMonthYearMonth();
+    const { openFrom, note } = req.body || {};
+    if(!openFrom || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(openFrom)) return res.status(400).json({ message: 'openFrom phải YYYY-MM-DD' });
+    // openFrom must be in current month or earlier (cannot be after month start?) allow any day before nextMonth month  start
+    const todayPrefix = new Date().toISOString().slice(0,7); // current YYYY-MM
+    if(openFrom.slice(0,7) !== todayPrefix){
+      return res.status(400).json({ message: 'openFrom phải thuộc tháng hiện tại' });
+    }
+    const cfg = await ScheduleConfig.findOneAndUpdate(
+      { month: nextMonth },
+      { month: nextMonth, openFrom, note },
+      { new: true, upsert: true }
+    );
+    res.json(cfg);
+  } catch(err){ next(err); }
+});

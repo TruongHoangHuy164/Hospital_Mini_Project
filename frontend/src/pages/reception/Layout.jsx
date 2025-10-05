@@ -21,6 +21,7 @@ export default function ReceptionLayout() {
               <li className="nav-item"><Link to="/reception/schedule" className="nav-link">Gán lịch cho bác sĩ</Link></li>
               <li className="nav-item"><Link to="/reception/lookup" className="nav-link">Tra cứu bệnh nhân</Link></li>
               <li className="nav-item"><Link to="/reception/print" className="nav-link">In số/hoá đơn</Link></li>
+              <li className="nav-item"><Link to="/reception/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>
           </div>

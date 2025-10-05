@@ -70,6 +70,7 @@ import CashierDashboard from './pages/cashier/Dashboard'
 import CashierPayments from './pages/cashier/Payments'
 import CashierInvoices from './pages/cashier/Invoices'
 import CashierReports from './pages/cashier/Reports'
+import MySchedule from './pages/shared/MySchedule'
 
 export default function App() {
   return (
@@ -135,17 +136,20 @@ export default function App() {
   <Route path="queue" element={<QueuePage />} />
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />
+        <Route path="my-schedule" element={<MySchedule />} />
       </Route>
 
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>
         <Route path="dashboard" element={<LabDashboard />} />
         <Route path="orders" element={<LabOrders />} />
         <Route path="results" element={<LabResults />} />
+        <Route path="my-schedule" element={<MySchedule />} />
       </Route>
 
       <Route path="/nurse" element={<RequireNurse><NurseLayout /></RequireNurse>}>
         <Route path="dashboard" element={<NurseDashboard />} />
         <Route path="patients-today" element={<PatientsToday />} />
+        <Route path="my-schedule" element={<MySchedule />} />
       </Route>
 
       <Route path="/cashier" element={<RequireCashier><CashierLayout /></RequireCashier>}>
@@ -153,6 +157,7 @@ export default function App() {
         <Route path="payments" element={<CashierPayments />} />
         <Route path="invoices" element={<CashierInvoices />} />
         <Route path="reports" element={<CashierReports />} />
+        <Route path="my-schedule" element={<MySchedule />} />
       </Route>
     </Routes>
     </>

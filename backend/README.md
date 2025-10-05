@@ -199,6 +199,17 @@ POST /api/work-schedules/bulk
 
 Response: `{ ok: true, upserted: <n>, modified: <n> }`
 
+### Ghi chú
+- Trường `day` lưu chuỗi `YYYY-MM-DD` để tránh lệch timezone.
+- CHỈ được tạo / chỉnh sửa lịch cho THÁNG KẾ TIẾP.
+- Người dùng (doctor, reception, lab, cashier, nurse) chỉ tạo/sửa/xóa lịch của chính họ; admin không bị giới hạn thời gian.
+- Endpoint `/me/self` dùng để xem lịch cá nhân theo tháng.
+- Cửa sổ mở đăng ký tháng kế tiếp được cấu hình động bởi admin qua ScheduleConfig:
+	- `GET /api/work-schedules/config/next` (xem cấu hình hiện tại)
+	- `PUT /api/work-schedules/config/next { openFrom, note }`
+	- Nếu chưa cấu hình: fallback mặc định ngày 15 tháng hiện tại.
+	- Người dùng thường chỉ thao tác khi `today >= openFrom`.
+
 ### Lấy lịch tháng cá nhân
 
 ```

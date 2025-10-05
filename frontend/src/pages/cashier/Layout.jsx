@@ -17,6 +17,7 @@ export default function CashierLayout() {
               <li className="nav-item"><Link to="/cashier/payments" className="nav-link">Thanh toán</Link></li>
               <li className="nav-item"><Link to="/cashier/invoices" className="nav-link">Hóa đơn</Link></li>
               <li className="nav-item"><Link to="/cashier/reports" className="nav-link">Báo cáo</Link></li>
+              <li className="nav-item"><Link to="/cashier/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>
           </div>
