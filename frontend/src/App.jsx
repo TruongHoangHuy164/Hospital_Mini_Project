@@ -1,5 +1,5 @@
 import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import Topbar from './components/Topbar'
 import Header from './components/Header'
 import Navbar from './components/Navbar'
@@ -35,7 +35,7 @@ import RequireDoctor from './pages/doctor/RequireDoctor'
 import DoctorLayout from './pages/doctor/Layout'
 import DoctorDashboard from './pages/doctor/Dashboard'
 import DoctorProfile from './pages/doctor/Profile'
-import DoctorSchedulePage from './pages/doctor/Schedule'
+
 import RequireReception from './pages/reception/RequireReception'
 import ReceptionLayout from './pages/reception/Layout'
 import ReceptionDashboard from './pages/reception/Dashboard'
@@ -125,6 +125,7 @@ export default function App() {
       <Route path="/doctor" element={<RequireDoctor><DoctorLayout /></RequireDoctor>}>
         <Route path="dashboard" element={<DoctorDashboard />} />
         <Route path="my-schedule" element={<MySchedule />} />
+        <Route path="schedule" element={<Navigate to="/doctor/my-schedule" replace />} />
         <Route path="profile" element={<DoctorProfile />} />
       </Route>
 
