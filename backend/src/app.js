@@ -20,6 +20,7 @@ const patientProfilesRouter = require('./routes/patientProfiles');
 const servicesRouter = require('./routes/services');
 const publicRouter = require('./routes/public');
 const aiRouter = require('./routes/ai');
+const workSchedulesRouter = require('./routes/workSchedules');
 
 const app = express();
 
@@ -48,6 +49,8 @@ app.use('/api/clinics', auth, authorize('admin'), clinicsRouter);
 app.use('/api/uploads', auth, authorize('admin','doctor','nurse'), uploadsRouter);
 app.use('/api/specialties', auth, authorize('admin'), specialtiesRouter);
 app.use('/api/services', auth, authorize('admin'), servicesRouter);
+// Work schedules: admin quản lý / người dùng tự xem
+app.use('/api/work-schedules', auth, authorize('admin','doctor','reception','lab','cashier','nurse'), workSchedulesRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/patient-profiles', patientProfilesRouter);
 app.use('/api/public', publicRouter);

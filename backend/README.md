@@ -136,3 +136,78 @@ Collections and relations:
 	- Fields: `donThuocId -> DonThuoc, thuocId -> Thuoc, soLuong`
 
 All schemas are defined under `src/models` with Mongoose refs and helpful indexes.
+
+## Work Schedules (Lịch làm việc theo tháng cho mọi role)
+
+Model: `WorkSchedule` (`src/models/WorkSchedule.js`)
+
+Fields:
+- `userId` -> `User`
+- `role`: `doctor|reception|lab|cashier|nurse`
+- `day`: Date (normalized 00:00)
+ - `day`: String `YYYY-MM-DD` (date-only, tránh lệch timezone)
+- `shift`: `sang|chieu|toi`
+- `shiftType`: `lam_viec|truc|nghi` (default `lam_viec`)
+- `clinicId` (optional)
+- `reason`, `note`, `meta`
+
+Indexes / constraints:
+- Unique: `(userId, day, shift)`
+- Compound: `(role, day)` for fast monthly queries
+
+### Endpoints
+
+All endpoints require `Authorization: Bearer <token>`.
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/api/work-schedules?month=YYYY-MM&role=&userId=` | admin + role users | Danh sách lịch trong tháng (lọc theo role hoặc user) |
+| POST | `/api/work-schedules` | admin | Tạo lịch 1 ca |
+| PUT | `/api/work-schedules/:id` | admin | Cập nhật lịch |
+| DELETE | `/api/work-schedules/:id` | admin | Xóa lịch |
+| POST | `/api/work-schedules/bulk` | admin | Bulk upsert nhiều lịch |
+| GET | `/api/work-schedules/stats/summary?month=YYYY-MM&role=doctor` | admin | Thống kê số ca theo `shiftType` |
+| GET | `/api/work-schedules/me/self?month=YYYY-MM` | doctor/reception/lab/cashier/nurse | Xem lịch cá nhân trong 1 tháng |
+
+### Tạo 1 lịch
+
+Request:
+```
+POST /api/work-schedules
+{
+	"userId": "...",
+	"role": "doctor",
+	"day": "2025-10-01",
+	"shift": "sang",
+	"shiftType": "lam_viec",
+	"note": "Khám ngoại trú"
+}
+```
+
+### Bulk upsert
+
+```
+POST /api/work-schedules/bulk
+{
+	"items": [
+		{ "userId": "...", "role": "doctor", "day": "2025-10-01", "shift": "sang", "shiftType": "lam_viec" },
+		{ "userId": "...", "role": "doctor", "day": "2025-10-01", "shift": "chieu", "shiftType": "truc" }
+	],
+	"upsert": true
+}
+```
+
+Response: `{ ok: true, upserted: <n>, modified: <n> }`
+
+### Lấy lịch tháng cá nhân
+
+```
+GET /api/work-schedules/me/self?month=2025-10
+```
+
+### Ghi chú
+- Trường `day` lưu dạng chuỗi `YYYY-MM-DD` để loại bỏ sai lệch timezone.
+- Tránh gửi trùng ca vì unique index sẽ trả 409.
+- Có thể mở rộng thêm shift khác bằng cách cập nhật enum trong model và validations.
+- Migration cũ sang string: chạy script `node src/scripts/migrateWorkScheduleDayToString.js`.
+- Hệ thống hiện tại CHỈ cho phép tạo/cập nhật lịch cho THÁNG KẾ TIẾP (next month) so với thời điểm hiện tại. Các yêu cầu ngoài tháng này sẽ bị từ chối (HTTP 400).

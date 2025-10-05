@@ -29,6 +29,7 @@ import Clinics from './pages/admin/clinic/Index'
 import AdminServicesPage from './pages/admin/service/Index'
 import StaffIndex from './pages/admin/staff/Index'
 import StaffEdit from './pages/admin/staff/Edit'
+import AdminWorkSchedulesPage from './pages/admin/schedule/Index'
 import SiteLayout from './layouts/SiteLayout'
 import RequireDoctor from './pages/doctor/RequireDoctor'
 import DoctorLayout from './pages/doctor/Layout'
@@ -117,6 +118,7 @@ export default function App() {
         <Route path="services" element={<AdminServicesPage />} />
         <Route path="staff" element={<StaffIndex />} />
         <Route path="staff/:id" element={<StaffEdit />} />
+  <Route path="work-schedules" element={<AdminWorkSchedulesPage />} />
       </Route>
 
       <Route path="/doctor" element={<RequireDoctor><DoctorLayout /></RequireDoctor>}>
