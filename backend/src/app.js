@@ -21,6 +21,7 @@ const servicesRouter = require('./routes/services');
 const publicRouter = require('./routes/public');
 const aiRouter = require('./routes/ai');
 const workSchedulesRouter = require('./routes/workSchedules');
+const changeAppointmentRouter = require('./routes/changeAppointment');
 
 const app = express();
 
@@ -53,6 +54,7 @@ app.use('/api/services', auth, authorize('admin'), servicesRouter);
 app.use('/api/work-schedules', auth, authorize('admin','doctor','reception','lab','cashier','nurse'), workSchedulesRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/patient-profiles', patientProfilesRouter);
+app.use('/api/change-appointment', changeAppointmentRouter);
 app.use('/api/public', publicRouter);
 app.use('/api/ai', aiRouter);
 

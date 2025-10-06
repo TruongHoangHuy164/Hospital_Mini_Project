@@ -59,6 +59,8 @@ import ChangePassword from './pages/user/ChangePassword'
 import ProfileSimple from './pages/user/ProfileSimple'
 import ProfileDebug from './pages/user/ProfileDebug'
 import PasswordDebug from './pages/user/PasswordDebug'
+import ChangeAppointmentRequest from './pages/user/ChangeAppointmentRequest'
+import ChangeAppointmentRequests from './pages/user/ChangeAppointmentRequests'
 import ServerStatus from './components/ServerStatus'
 import RequireNurse from './pages/nurse/RequireNurse'
 import NurseLayout from './pages/nurse/Layout'
@@ -71,6 +73,7 @@ import CashierPayments from './pages/cashier/Payments'
 import CashierInvoices from './pages/cashier/Invoices'
 import CashierReports from './pages/cashier/Reports'
 import MySchedule from './pages/shared/MySchedule'
+import ChangeAppointmentManagement from './pages/reception/ChangeAppointmentManagement'
 
 export default function App() {
   return (
@@ -109,6 +112,8 @@ export default function App() {
         <Route path="/user/profile-simple" element={<ProfileSimple />} />
         <Route path="/user/profile-debug" element={<ProfileDebug />} />
         <Route path="/user/password-debug" element={<PasswordDebug />} />
+        <Route path="/user/change-appointment/:appointmentId" element={<ChangeAppointmentRequest />} />
+        <Route path="/user/change-appointment-requests" element={<ChangeAppointmentRequests />} />
       </Route>
 
       <Route path="/admin" element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
@@ -138,6 +143,7 @@ export default function App() {
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />
         <Route path="my-schedule" element={<MySchedule />} />
+        <Route path="change-appointments" element={<ChangeAppointmentManagement />} />
       </Route>
 
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>

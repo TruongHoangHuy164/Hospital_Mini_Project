@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -85,11 +86,23 @@ export default function BookingHistory(){
 
   return (
     <div className="container my-4">
-      <h3>Lịch sử đặt khám</h3>
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h3>Lịch sử đặt khám</h3>
+        <div>
+          <Link to="/user/change-appointment-requests" className="btn btn-outline-primary me-2">
+            <i className="bi bi-calendar-week me-2"></i>
+            Yêu cầu thay đổi lịch
+          </Link>
+          <Link to="/booking" className="btn btn-primary">
+            <i className="bi bi-plus-circle me-2"></i>
+            Đặt lịch mới
+          </Link>
+        </div>
+      </div>
       {error && <div className="alert alert-danger">{error}</div>}
       <div className="table-responsive">
         <table className="table table-striped">
-          <thead><tr><th>Ngày</th><th>Tên bệnh nhân</th><th>Khung giờ</th><th>Bác sĩ</th><th>Chuyên khoa</th><th>Trạng thái</th><th>STT</th><th>Hủy lịch</th></tr></thead>
+          <thead><tr><th>Ngày</th><th>Tên bệnh nhân</th><th>Khung giờ</th><th>Bác sĩ</th><th>Chuyên khoa</th><th>Trạng thái</th><th>STT</th><th>Thao tác</th></tr></thead>
           <tbody>
             {Array.isArray(items) && items.map(it=> (
               <tr key={it._id}>
@@ -112,15 +125,29 @@ export default function BookingHistory(){
                 <td>{it.soThuTu ?? '-'}</td>
                 <td>
                   {canModifyAppointment(it) ? (
-                    <button
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={() => handleCancelAppointment(it._id)}
-                      disabled={actionLoading === it._id}
-                    >
-                      {actionLoading === it._id ? 'Đang hủy...' : 'Hủy lịch'}
-                    </button>
+                    <div className="btn-group">
+                      <Link 
+                        to={`/user/change-appointment/${it._id}`}
+                        className="btn btn-sm btn-outline-warning"
+                        title="Yêu cầu thay đổi lịch"
+                      >
+                        <i className="bi bi-calendar-event"></i>
+                      </Link>
+                      <button
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleCancelAppointment(it._id)}
+                        disabled={actionLoading === it._id}
+                        title="Hủy lịch khám"
+                      >
+                        {actionLoading === it._id ? (
+                          <span className="spinner-border spinner-border-sm" role="status"></span>
+                        ) : (
+                          <i className="bi bi-trash"></i>
+                        )}
+                      </button>
+                    </div>
                   ) : (
-                    <span className="text-muted small">Không thể hủy</span>
+                    <span className="text-muted small">Đã kết thúc</span>
                   )}
                 </td>
               </tr>

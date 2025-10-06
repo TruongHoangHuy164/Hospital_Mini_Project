@@ -18,6 +18,7 @@ export default function ReceptionLayout() {
               <li className="nav-item"><Link to="/reception/patients/new" className="nav-link">Tạo hồ sơ bệnh nhân</Link></li>
               <li className="nav-item"><Link to="/reception/queue" className="nav-link">Cấp số thứ tự</Link></li>
               <li className="nav-item"><Link to="/reception/appointments" className="nav-link">Quản lý lịch hẹn</Link></li>
+              <li className="nav-item"><Link to="/reception/change-appointments" className="nav-link">Yêu cầu đổi lịch</Link></li>
               <li className="nav-item"><Link to="/reception/schedule" className="nav-link">Gán lịch cho bác sĩ</Link></li>
               <li className="nav-item"><Link to="/reception/lookup" className="nav-link">Tra cứu bệnh nhân</Link></li>
               <li className="nav-item"><Link to="/reception/print" className="nav-link">In số/hoá đơn</Link></li>
