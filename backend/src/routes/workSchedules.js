@@ -101,8 +101,14 @@ router.post('/', async (req, res, next) => {
     const user = await User.findById(userId).select('role');
     if(!user) return res.status(404).json({ message: 'User không tồn tại' });
     if(user.role !== role) return res.status(400).json({ message: 'role không khớp với user' });
-    if(req.user.role !== 'admin' && req.user.id !== String(userId)){
-      return res.status(403).json({ message: 'Chỉ được đăng ký lịch cho chính mình' });
+    // Allow admin to create for anyone. Also allow reception to create schedules for doctors.
+    if(req.user.role !== 'admin'){
+      if(req.user.role === 'reception'){
+        // reception can only create schedules for users with role 'doctor'
+        if(user.role !== 'doctor') return res.status(403).json({ message: 'Reception chỉ được đăng ký lịch cho bác sĩ' });
+      } else if(req.user.id !== String(userId)){
+        return res.status(403).json({ message: 'Chỉ được đăng ký lịch cho chính mình' });
+      }
     }
   const doc = await WorkSchedule.create({ userId, role, day, shift, shiftType, clinicId, reason, note, meta });
     res.status(201).json(doc);
@@ -129,8 +135,15 @@ router.put('/:id', async (req, res, next) => {
     const targetDay = update.day || existing.day;
     try { assertNextMonth(targetDay); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-    if(req.user.role !== 'admin' && existing.userId !== req.user.id){
-      return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
+    // Allow admin to edit any. Reception can edit schedules for doctors.
+    if(req.user.role !== 'admin'){
+      if(req.user.role === 'reception'){
+        // reception may edit only schedules that belong to doctors
+        const targetUser = await User.findById(existing.userId).select('role');
+        if(!targetUser || targetUser.role !== 'doctor') return res.status(403).json({ message: 'Reception chỉ được sửa lịch bác sĩ' });
+      } else if(existing.userId !== req.user.id){
+        return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
+      }
     }
     const doc = await WorkSchedule.findByIdAndUpdate(req.params.id, update, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy' });
@@ -148,8 +161,14 @@ router.delete('/:id', async (req, res, next) => {
     const existing = await WorkSchedule.findById(req.params.id);
     if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-    if(req.user.role !== 'admin' && existing.userId !== req.user.id){
-      return res.status(403).json({ message: 'Không được xóa lịch của người khác' });
+    // Allow admin to delete any. Reception can delete schedules for doctors.
+    if(req.user.role !== 'admin'){
+      if(req.user.role === 'reception'){
+        const targetUser = await User.findById(existing.userId).select('role');
+        if(!targetUser || targetUser.role !== 'doctor') return res.status(403).json({ message: 'Reception chỉ được xóa lịch bác sĩ' });
+      } else if(existing.userId !== req.user.id){
+        return res.status(403).json({ message: 'Không được xóa lịch của người khác' });
+      }
     }
     const r = await WorkSchedule.findByIdAndDelete(req.params.id);
     res.json({ ok: true });

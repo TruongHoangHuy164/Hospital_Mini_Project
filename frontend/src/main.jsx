@@ -8,6 +8,7 @@ import 'bootstrap/dist/css/bootstrap.min.css'
 import 'bootstrap-icons/font/bootstrap-icons.css'
 import './styles.css'
 import 'bootstrap/dist/js/bootstrap.bundle.min.js'
+import './styles/reception.css'
 
 const root = createRoot(document.getElementById('root'))
 root.render(

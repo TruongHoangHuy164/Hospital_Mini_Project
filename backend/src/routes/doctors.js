@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const BacSi = require('../models/BacSi');
 const PhongKham = require('../models/PhongKham');
 const User = require('../models/User');
@@ -45,12 +46,27 @@ router.post('/', async (req, res, next) => {
     if (!body.hoTen || !body.chuyenKhoa || !body.phongKhamId) {
       return res.status(400).json({ message: 'Thiếu thông tin bắt buộc' });
     }
+    if (!mongoose.isValidObjectId(body.phongKhamId)) {
+      return res.status(400).json({ message: 'phongKhamId không hợp lệ' });
+    }
     // Ensure clinic exists
     const pk = await PhongKham.findById(body.phongKhamId);
     if (!pk) return res.status(400).json({ message: 'Phòng khám không tồn tại' });
 
-    const bs = await BacSi.create(body);
-    return res.status(201).json(bs);
+    try {
+      const bs = await BacSi.create(body);
+      return res.status(201).json(bs);
+    } catch (err) {
+      // Duplicate key (email, maSo, userId)
+      if (err.code === 11000) {
+        const dupFields = Object.keys(err.keyPattern || {});
+        return res.status(409).json({ message: `Giá trị đã tồn tại ở trường: ${dupFields.join(', ')}` });
+      }
+      if (err.name === 'ValidationError') {
+        return res.status(400).json({ message: err.message });
+      }
+      throw err; // Let global handler log unexpected
+    }
   } catch (err) {
     return next(err);
   }
