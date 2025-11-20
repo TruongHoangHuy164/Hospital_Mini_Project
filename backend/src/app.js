@@ -20,6 +20,7 @@ const patientProfilesRouter = require('./routes/patientProfiles');
 const servicesRouter = require('./routes/services');
 const publicRouter = require('./routes/public');
 const aiRouter = require('./routes/ai');
+const pharmacyRouter = require('./routes/pharmacy');
 const workSchedulesRouter = require('./routes/workSchedules');
 
 const app = express();
@@ -55,6 +56,8 @@ app.use('/api/booking', bookingRouter);
 app.use('/api/patient-profiles', patientProfilesRouter);
 app.use('/api/public', publicRouter);
 app.use('/api/ai', aiRouter);
+// Pharmacy routes (staff with role 'pharmacy' or admin)
+app.use('/api/pharmacy', auth, authorize('pharmacy','admin'), pharmacyRouter);
 
 // Protected sample route
 app.get('/api/profile', auth, (req, res) => {

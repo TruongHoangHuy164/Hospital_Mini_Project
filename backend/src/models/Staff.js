@@ -9,7 +9,7 @@ const StaffSchema = new mongoose.Schema(
     soDienThoai: { type: String, index: true },
     email: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
     diaChi: { type: String },
-  vaiTro: { type: String, enum: ['reception','lab','cashier','nurse'], required: true, index: true },
+  vaiTro: { type: String, enum: ['reception','lab','cashier','nurse','pharmacy'], required: true, index: true },
     phongKhamId: { type: mongoose.Schema.Types.ObjectId, ref: 'PhongKham', index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true, unique: true, sparse: true },
     trangThai: { type: String, enum: ['dang_cong_tac', 'tam_nghi', 'da_nghi'], default: 'dang_cong_tac', index: true },
