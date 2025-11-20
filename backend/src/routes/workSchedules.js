@@ -129,7 +129,7 @@ router.put('/:id', async (req, res, next) => {
     const targetDay = update.day || existing.day;
     try { assertNextMonth(targetDay); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-    if(req.user.role !== 'admin' && existing.userId !== req.user.id){
+    if(req.user.role !== 'admin' && String(existing.userId) !== String(req.user.id)){
       return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
     }
     const doc = await WorkSchedule.findByIdAndUpdate(req.params.id, update, { new: true });
@@ -148,7 +148,7 @@ router.delete('/:id', async (req, res, next) => {
     const existing = await WorkSchedule.findById(req.params.id);
     if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-    if(req.user.role !== 'admin' && existing.userId !== req.user.id){
+    if(req.user.role !== 'admin' && String(existing.userId) !== String(req.user.id)){
       return res.status(403).json({ message: 'Không được xóa lịch của người khác' });
     }
     const r = await WorkSchedule.findByIdAndDelete(req.params.id);
@@ -173,7 +173,7 @@ router.post('/bulk', async (req, res, next) => {
   if(!isDayStr(it.day)) continue;
       if(it.day.slice(0,7) !== allowedMonth) return res.status(400).json({ message: `Tất cả day phải thuộc tháng tiếp theo (${allowedMonth})` });
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-      if(!isAdmin && it.userId !== req.user.id) return res.status(403).json({ message: 'Không được bulk lịch cho người khác' });
+      if(!isAdmin && String(it.userId) !== String(req.user.id)) return res.status(403).json({ message: 'Không được bulk lịch cho người khác' });
   const doc = { ...it };
       if(doc.shiftType && !['lam_viec','truc','nghi'].includes(doc.shiftType)) doc.shiftType='lam_viec';
       ops.push({ updateOne: { filter: { userId: doc.userId, day: doc.day, shift: doc.shift }, update: { $set: doc }, upsert } });
