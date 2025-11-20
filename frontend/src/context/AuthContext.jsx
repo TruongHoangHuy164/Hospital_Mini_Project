@@ -35,9 +35,9 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signUp = async (name, email, password) => {
+  const signUp = async (name, email, phone, password) => {
     try {
-      const u = await apiRegister(name, email, password);
+      const u = await apiRegister(name, email, phone, password);
       setUser(u);
       return u;
     } catch (error) {

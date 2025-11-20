@@ -56,20 +56,24 @@ async function request(path, options = {}) {
   }
 }
 
-export async function register(name, email, password) {
+export async function register(name, email, phone, password) {
   try {
-    console.log('Auth: Attempting registration for', email);
+    console.log('Auth: Attempting registration for', email || phone);
+    const payload = { name, password };
+    if (email) payload.email = email;
+    if (phone) payload.phone = phone;
+
     const res = await request('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ name, email, password }),
+      body: JSON.stringify(payload),
     });
-    
+
     if (!res.ok) {
       const errorData = await res.json();
       console.error('Auth: Registration failed:', errorData);
       throw errorData;
     }
-    
+
     const data = await res.json();
     setTokens(data);
     console.log('Auth: Registration successful');
@@ -86,9 +90,12 @@ export async function register(name, email, password) {
 export async function login(email, password) {
   try {
     console.log('Auth: Attempting login for', email);
+    const payload = { password };
+    if (email && email.includes('@')) payload.email = email;
+    else payload.identifier = email;
     const res = await request('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(payload),
     });
     
     if (!res.ok) {

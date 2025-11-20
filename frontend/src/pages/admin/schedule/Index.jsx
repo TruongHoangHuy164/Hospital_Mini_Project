@@ -7,7 +7,7 @@ import { fetchNextScheduleConfig, updateNextScheduleConfig } from '../../../api/
 import { useAuth } from '../../../context/AuthContext';
 import { autoGenerateSchedules } from '../../../api/autoSchedule';
 
-const roles = ['doctor','reception','lab','cashier','nurse'];
+const roles = ['doctor','reception','lab','cashier','nurse','pharmacy'];
 const shifts = ['sang','chieu','toi'];
 const shiftTypeOptions = [
   { value: 'lam_viec', label: 'Làm' },

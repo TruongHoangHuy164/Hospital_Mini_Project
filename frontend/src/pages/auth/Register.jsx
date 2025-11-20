@@ -6,6 +6,7 @@ import ServerStatusCheck from '../../components/ServerStatusCheck';
 export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -15,7 +16,11 @@ export default function Register() {
     e.preventDefault();
     setError('');
     try {
-      const u = await signUp(name, email, password);
+      if (!email && !phone) {
+        setError('Vui lòng nhập email hoặc số điện thoại');
+        return;
+      }
+      const u = await signUp(name, email || '', phone || '', password);
       if (u?.role === 'admin') {
         navigate('/admin/overview');
       } else {
@@ -38,7 +43,13 @@ export default function Register() {
         </div>
         <div className="mb-3">
           <label className="form-label">Email</label>
-          <input type="email" className="form-control" value={email} onChange={(e)=>setEmail(e.target.value)} required />
+          <input type="email" placeholder="you@example.com" className="form-control" value={email} onChange={(e)=>setEmail(e.target.value)} />
+          <div className="form-text">Có thể bỏ trống nếu đăng ký bằng số điện thoại</div>
+        </div>
+        <div className="mb-3">
+          <label className="form-label">Số điện thoại</label>
+          <input type="tel" placeholder="0912345678" className="form-control" value={phone} onChange={(e)=>setPhone(e.target.value)} />
+          <div className="form-text">Có thể bỏ trống nếu đăng ký bằng email</div>
         </div>
         <div className="mb-3">
           <label className="form-label">Mật khẩu</label>

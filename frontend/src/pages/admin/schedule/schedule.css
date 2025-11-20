@@ -1,4 +1,4 @@
-.schedule-table td, .schedule-table th { padding: 2px 4px; text-align: center; vertical-align: middle; }
+.schedule-table td, .schedule-table th { padding: 10px 4px; text-align: center; vertical-align: middle; }
 .schedule-table .user-col { min-width: 140px; }
 .schedule-table .cell { cursor: pointer; position: relative; min-width: 42px; height: 34px; }
 .schedule-table .cell .badge { width: 100%; font-weight:500; font-size: .65rem; line-height: 1; padding: .35rem .25rem; display:inline-block; }

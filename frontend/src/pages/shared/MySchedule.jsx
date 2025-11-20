@@ -3,7 +3,7 @@ import { fetchMySchedule, createWorkSchedule, updateWorkSchedule, deleteWorkSche
 import { fetchNextScheduleConfig } from '../../api/scheduleConfig';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'react-toastify';
-import '../admin/schedule/schedule.css';
+import styles from './MySchedule.module.css';
 
 function formatMonth(date){ const y=date.getFullYear(); const m=String(date.getMonth()+1).padStart(2,'0'); return `${y}-${m}`; }
 function localDateStr(d){ const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
@@ -57,7 +57,15 @@ export default function MySchedule(){
   async function load(){ try{ setLoading(true); const data=await fetchMySchedule(monthStr); setRows(data); } catch{ toast.error('Tải lịch thất bại'); } finally{ setLoading(false);} }
 
   function getCell(day, shift){ const ds=localDateStr(day); return rows.find(r=> r.day===ds && r.shift===shift); }
-  function cycle(current){ if(!current) return shiftTypes[0]; const idx=shiftTypes.indexOf(current); if(idx===-1) return shiftTypes[0]; if(idx===shiftTypes.length-1) return null; return shiftTypes[idx+1]; }
+  
+  // Cải thiện logic cycle: Trống → Làm việc → Trực → Nghỉ → Xóa (null)
+  function cycle(current){ 
+    if(!current) return 'lam_viec'; // Trống → Làm việc
+    if(current === 'lam_viec') return 'truc'; // Làm việc → Trực
+    if(current === 'truc') return 'nghi'; // Trực → Nghỉ  
+    if(current === 'nghi') return null; // Nghỉ → Xóa
+    return 'lam_viec'; // Fallback
+  }
 
   // Tính thống kê mỗi khi rows thay đổi
   useEffect(()=>{
@@ -75,113 +83,516 @@ export default function MySchedule(){
 
   const rules = ROLE_RULES[user?.role] || { minWorkDays:0, maxWorkDays:999, minNight:0, maxNight:999 };
 
-  function violatesAdd(type, shift){
+  function violatesAdd(type, shift, day = null){
+    // Skip validation for 'nghi' (off days)
+    if(type === 'nghi') return null;
+    
     // Preview stats if we add this shift
     const next = { ...stats };
-    const dayStr = modal?.day ? localDateStr(modal.day) : null;
-    // For quick add we pass directly day+shift
-    if(!modal){ /* quick mode use params */ }
-    if(type === 'nghi') return false; // nghỉ không bị hạn chế
-    // if new working shift on a day that currently has no working shift recorded, increment workDays
-    if(dayStr && !rows.some(r=> r.day===dayStr && r.shiftType!=='nghi')) next.workDays++;
-    if(shift === 'toi' && type === 'truc') next.nightShifts = next.nightShifts + 1;
-    if(shift !== 'toi' && type !== 'nghi') next.dayShifts = next.dayShifts + 1;
-    if(next.workDays > rules.maxWorkDays) return `Vượt quá số ngày làm tối đa (${rules.maxWorkDays})`;
-    if(shift === 'toi' && type === 'truc' && next.nightShifts > rules.maxNight) return `Vượt quá số ca trực tối đa (${rules.maxNight})`;
+    const dayStr = day ? localDateStr(day) : (modal?.day ? localDateStr(modal.day) : null);
+    
+    // If new working shift on a day that currently has no working shift recorded, increment workDays
+    if(dayStr && !rows.some(r => r.day === dayStr && r.shiftType !== 'nghi')) {
+      next.workDays++;
+    }
+    
+    // Count night shifts (toi + truc)
+    if(shift === 'toi' && type === 'truc') {
+      next.nightShifts++;
+    }
+    
+    // Count day shifts (sang, chieu with any type except nghi)
+    if(shift !== 'toi' && type !== 'nghi') {
+      next.dayShifts++;
+    }
+    
+    // Check constraints
+    if(next.workDays > rules.maxWorkDays) {
+      return `Vượt quá số ngày làm tối đa (${rules.maxWorkDays})`;
+    }
+    
+    if(shift === 'toi' && type === 'truc' && next.nightShifts > rules.maxNight) {
+      return `Vượt quá số ca trực tối đa (${rules.maxNight})`;
+    }
+    
     return null;
   }
 
   async function quick(day, shift, e){
-    if(!windowOpen){ toast.warn('Chỉ đăng ký từ ngày 15 trở đi'); return; }
-    const cell=getCell(day,shift); const next=cycle(cell?.shiftType);
-    if(next===null){ if(cell){ try{ await deleteWorkSchedule(cell._id); setRows(prev=> prev.filter(r=> r._id!==cell._id)); } catch{ toast.error('Xóa thất bại'); } } return; }
-    // constraint check only when adding/modifying to non-null state
-    if(!cell){
-      const msg = violatesAdd(next, shift);
-      if(msg){ toast.warn(msg); return; }
+    console.log('🚀 Quick toggle:', { day: day.getDate(), shift, windowOpen });
+    
+    if(!windowOpen){ 
+      toast.warn('🔒 Chưa mở đăng ký - Chỉ đăng ký từ ngày 15 trở đi'); 
+      return; 
     }
-    if(cell){
-      try{ await updateWorkSchedule(cell._id,{ shiftType: next }); setRows(prev=> prev.map(r=> r._id===cell._id? { ...r, shiftType: next }: r)); } catch{ toast.error('Cập nhật thất bại'); }
-    } else {
-      try{ const created=await createWorkSchedule({ userId: user.id||user._id, role: user.role, day: localDateStr(day), shift, shiftType: next }); setRows(prev=> [...prev, created]); } catch{ toast.error('Tạo thất bại'); }
+    
+    const cell = getCell(day, shift); 
+    const currentType = cell?.shiftType;
+    const nextType = cycle(currentType);
+    
+    console.log('🔄 Cycle state:', { 
+      current: currentType || 'trống', 
+      next: nextType || 'xóa',
+      hasCell: !!cell 
+    });
+    
+    // Nếu next là null → Xóa ca hiện tại
+    if(nextType === null){ 
+      if(cell){ 
+        try{ 
+          await deleteWorkSchedule(cell._id); 
+          setRows(prev => prev.filter(r => r._id !== cell._id)); 
+          toast.success('🗑️ Đã xóa ca làm việc'); 
+        } catch(error){ 
+          console.error('❌ Delete error:', error);
+          toast.error('Xóa thất bại: ' + (error.response?.data?.message || error.message)); 
+        } 
+      } else {
+        toast.info('ℹ️ Không có ca nào để xóa');
+      }
+      return; 
+    }
+    
+    // Kiểm tra ràng buộc khi tạo ca mới (không áp dụng cho 'nghi')
+    if(!cell && nextType !== 'nghi'){
+      const msg = violatesAdd(nextType, shift, day);
+      if(msg){ 
+        toast.warn('⚠️ ' + msg); 
+        return; 
+      }
+    }
+    
+    // Cập nhật hoặc tạo mới
+    try {
+      if(cell){
+        // Cập nhật ca hiện có
+        await updateWorkSchedule(cell._id, { shiftType: nextType }); 
+        setRows(prev => prev.map(r => r._id === cell._id ? { ...r, shiftType: nextType } : r)); 
+        toast.success(`✅ Đã chuyển thành: ${shiftTypeLabel[nextType]}`); 
+      } else {
+        // Tạo ca mới
+        const created = await createWorkSchedule({ 
+          userId: user.id || user._id, 
+          role: user.role, 
+          day: localDateStr(day), 
+          shift, 
+          shiftType: nextType 
+        }); 
+        setRows(prev => [...prev, created]); 
+        toast.success(`🎉 Đã tạo ca: ${shiftTypeLabel[nextType]}`); 
+      }
+    } catch(error) {
+      console.error('❌ Quick operation error:', error);
+      const errorMsg = error.response?.data?.message || error.message || 'Có lỗi xảy ra';
+      toast.error('Thao tác thất bại: ' + errorMsg); 
     }
   }
 
-  function handleClick(day, shift, e){ if(e && (e.ctrlKey||e.metaKey||e.altKey)) return quick(day,shift,e); if(!windowOpen){ toast.warn('Chỉ đăng ký từ ngày 15 trở đi'); return; } const cell=getCell(day,shift); setModal({ day, shift, existing: cell }); }
+  function handleClick(day, shift, e){ 
+    console.log('🖱️ Cell clicked:', { 
+      day: day.getDate(), 
+      shift, 
+      ctrlKey: e?.ctrlKey, 
+      altKey: e?.altKey, 
+      metaKey: e?.metaKey,
+      windowOpen 
+    });
+    
+    // Kiểm tra phím tắt cho chế độ chuyển đổi nhanh
+    if(e && (e.ctrlKey || e.metaKey || e.altKey)) { 
+      e.preventDefault(); 
+      e.stopPropagation(); 
+      console.log('⚡ Quick mode activated');
+      quick(day, shift, e); 
+      return; 
+    } 
+    
+    // Kiểm tra cửa sổ đăng ký có mở không
+    if(!windowOpen){ 
+      toast.warn('🔒 Chưa mở đăng ký - Chỉ đăng ký từ ngày 15 trở đi'); 
+      return; 
+    } 
+    
+    // Mở modal để chọn loại ca
+    const cell = getCell(day, shift); 
+    console.log('📋 Opening modal:', { day: day.getDate(), shift, hasExisting: !!cell });
+    setModal({ day, shift, existing: cell }); 
+  }
 
   async function save(type){
-    if(!modal) return; if(!windowOpen){ toast.warn('Chỉ đăng ký từ ngày 15 trở đi'); return; }
-    const { day, shift, existing } = modal;
-    if(!existing && type !== 'nghi'){
-      const msg = violatesAdd(type, shift);
-      if(msg){ toast.warn(msg); return; }
+    console.log('Save function called:', { type, modal, windowOpen });
+    
+    if(!modal) return; 
+    
+    if(!windowOpen){ 
+      toast.warn('Chỉ đăng ký từ ngày 15 trở đi'); 
+      return; 
     }
+    
+    const { day, shift, existing } = modal;
+    
+    if(!existing && type !== 'nghi'){
+      const msg = violatesAdd(type, shift, day);
+      if(msg){ 
+        toast.warn(msg); 
+        return; 
+      }
+    }
+    
     try {
       if(existing){
-        await updateWorkSchedule(existing._id,{ shiftType: type });
-        setRows(prev=> prev.map(r=> r._id===existing._id? { ...r, shiftType: type }: r));
+        await updateWorkSchedule(existing._id, { shiftType: type });
+        setRows(prev => prev.map(r => r._id === existing._id ? { ...r, shiftType: type } : r));
+        toast.success(`Đã cập nhật: ${shiftTypeLabel[type]}`);
       } else {
-        const created=await createWorkSchedule({ userId: user.id||user._id, role: user.role, day: localDateStr(day), shift, shiftType: type });
-        setRows(prev=> [...prev, created]);
+        const created = await createWorkSchedule({ 
+          userId: user.id || user._id, 
+          role: user.role, 
+          day: localDateStr(day), 
+          shift, 
+          shiftType: type 
+        });
+        setRows(prev => [...prev, created]);
+        toast.success(`Đã tạo: ${shiftTypeLabel[type]}`);
       }
       setModal(null);
-    } catch { toast.error('Lưu thất bại'); }
+    } catch(error) { 
+      console.error('Save error:', error);
+      toast.error('Lưu thất bại'); 
+    }
   }
-  async function clearCell(){ if(!modal) return; if(!windowOpen){ toast.warn('Chỉ đăng ký từ ngày 15 trở đi'); return; } const { existing } = modal; if(existing){ try{ await deleteWorkSchedule(existing._id); setRows(prev=> prev.filter(r=> r._id!==existing._id)); } catch{ toast.error('Xóa thất bại'); } } setModal(null); }
+  async function clearCell(){ 
+    console.log('ClearCell called:', { modal, windowOpen });
+    
+    if(!modal) return; 
+    
+    if(!windowOpen){ 
+      toast.warn('Chỉ đăng ký từ ngày 15 trở đi'); 
+      return; 
+    } 
+    
+    const { existing } = modal; 
+    
+    if(existing){ 
+      try{ 
+        await deleteWorkSchedule(existing._id); 
+        setRows(prev => prev.filter(r => r._id !== existing._id)); 
+        toast.success('Đã xóa ca'); 
+      } catch(error){ 
+        console.error('Clear error:', error);
+        toast.error('Xóa thất bại'); 
+      } 
+    } 
+    
+    setModal(null); 
+  }
 
   function badge(cell){ if(!cell) return <span className="placeholder">.</span>; return <span className="badge bg-transparent text-dark">{shiftTypeLabel[cell.shiftType]||cell.shiftType}</span>; }
 
+  const today = new Date();
+  const todayStr = localDateStr(today);
+
   return (
-    <div>
-      <h2 className="mb-1">Lịch cá nhân tháng kế tiếp ({monthStr})</h2>
-  <div className="text-muted small mb-3">Click để chọn; Ctrl/Alt + Click chuyển nhanh. Chỉ đăng ký được tháng kế tiếp. Mở theo cấu hình admin (openFrom = {config?.openFrom || (new Date().toISOString().slice(0,7)+'-15')}). Trạng thái: {windowOpen? 'MỞ':'ĐANG KHÓA'}.</div>
-      <div className="mb-2 d-flex gap-2 flex-wrap">
-        <button className="btn btn-sm btn-outline-secondary" onClick={load} disabled={loading}>Tải lại</button>
-        <button className="btn btn-sm btn-outline-danger" onClick={async()=>{
-          if(!windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
-          if(!window.confirm('Xóa toàn bộ lịch tháng kế tiếp của bạn?')) return;
-          try { await resetMyNextMonthSchedule(); toast.success('Đã xóa'); load(); } catch { toast.error('Xóa thất bại'); }
-        }}>Xóa toàn bộ tháng</button>
-      </div>
-      <div className="card mb-3 small">
-        <div className="card-body py-2">
-          <strong>Hướng dẫn & Ràng buộc:</strong>
-          <ul className="mb-1 mt-2">
-            <li>Chỉ đăng ký THÁNG KẾ TIẾP sau ngày mở: <code>{config?.openFrom || '(chưa cấu hình)'}</code>.</li>
-            <li>Ngày làm tính khi có ít nhất 1 ca làm/trực (không tính ca nghỉ).</li>
-            <li>Không vượt quá: <strong>{rules.maxWorkDays}</strong> ngày làm & <strong>{rules.maxNight}</strong> ca trực.</li>
-            <li>Tối thiểu cần: {rules.minWorkDays} ngày làm & {rules.minNight} ca trực (mục tiêu khuyến nghị).</li>
-            <li>Ca tối với loại "Trực" tính vào tổng ca trực.</li>
-          </ul>
-          <div className="d-flex flex-wrap gap-3 mt-2">
-            <span>Ngày làm hiện tại: <strong className={stats.workDays < rules.minWorkDays? 'text-warning': stats.workDays > rules.maxWorkDays? 'text-danger':'text-success'}>{stats.workDays}</strong></span>
-            <span>Ca trực: <strong className={stats.nightShifts < rules.minNight? 'text-warning': stats.nightShifts > rules.maxNight? 'text-danger':'text-success'}>{stats.nightShifts}</strong></span>
-            <span>Ca ban ngày: <strong>{stats.dayShifts}</strong></span>
-          </div>
-        </div>
-      </div>
-      <div className="table-responsive" style={{ maxHeight: '70vh' }}>
-        <table className="table table-sm table-bordered align-middle schedule-table">
-          <thead className="table-light"><tr><th style={{minWidth:80}}>Ca/Ngày</th>{days.map(d=> <th key={localDateStr(d)} style={{minWidth:42}} className="text-center">{d.getDate()}</th>)}</tr></thead>
-          <tbody>
-            {shifts.map(sh=> <tr key={sh}> <td style={{position:'sticky',left:0,background:'#fff'}} className="fw-semibold">{sh}</td> {days.map(d=> { const cell=getCell(d,sh); const bg= cell? 'cell-'+cell.shiftType : 'empty'; return <td key={sh+localDateStr(d)} className={`cell ${bg}`} onClick={(e)=> handleClick(d,sh,e)}>{badge(cell)}</td>; })} </tr>)}
-          </tbody>
-        </table>
-      </div>
-      {modal && (
-        <div className="modal d-block" tabIndex="-1" onClick={()=> setModal(null)}>
-          <div className="modal-dialog" onClick={e=> e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header"><h5 className="modal-title">Ca {modal.shift} ngày {modal.day.getDate()}</h5><button className="btn-close" onClick={()=> setModal(null)}></button></div>
-              <div className="modal-body">
-                {shiftTypes.map(t=> <button key={t} className="btn btn-outline-primary me-2 mb-2" onClick={()=> save(t)}>{shiftTypeLabel[t]}</button>)}
-                <button className="btn btn-outline-danger ms-2 mb-2" onClick={clearCell}>Xóa</button>
-              </div>
+    <div className={styles.scheduleContainer}>
+      <div className={styles.scheduleCard}>
+        {/* Header */}
+        <div className={styles.header}>
+          <h1 className={styles.title}>Lịch Làm Việc Cá Nhân</h1>
+          <div className={styles.monthNav}>
+            <div className={styles.currentMonth}>{monthStr}</div>
+            <div className={`${styles.statusIndicator} ${windowOpen ? styles.statusOpen : styles.statusClosed}`}>
+              {windowOpen ? '✅ Đang mở đăng ký' : '🔒 Đang khóa'}
             </div>
           </div>
         </div>
-      )}
-      {loading && <div className="text-muted small mt-2">Đang tải...</div>}
+
+        {/* Stats Section */}
+        <div className={styles.statsSection}>
+          <div className={styles.statsCard}>
+            <div className={styles.statsTitle}>Tổng ngày làm việc</div>
+            <div className={styles.statsValue}>{stats.workDays}</div>
+            <div className={styles.statsSubtext}>
+              Mục tiêu: {rules.minWorkDays}-{rules.maxWorkDays} ngày
+            </div>
+          </div>
+          <div className={styles.statsCard}>
+            <div className={styles.statsTitle}>Ca trực đêm</div>
+            <div className={styles.statsValue}>{stats.nightShifts}</div>
+            <div className={styles.statsSubtext}>
+              Mục tiêu: {rules.minNight}-{rules.maxNight} ca
+            </div>
+          </div>
+          <div className={styles.statsCard}>
+            <div className={styles.statsTitle}>Ca ban ngày</div>
+            <div className={styles.statsValue}>{stats.dayShifts}</div>
+            <div className={styles.statsSubtext}>
+              Bao gồm ca sáng và chiều
+            </div>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className={styles.actionButtons}>
+          <button 
+            className={styles.actionButton} 
+            onClick={load} 
+            disabled={loading}
+          >
+            {loading ? '⏳ Đang tải...' : '🔄 Tải lại'}
+          </button>
+          <button 
+            className={`${styles.actionButton} ${styles.danger}`}
+            onClick={async()=>{
+              if(!windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
+              if(!window.confirm('Xóa toàn bộ lịch tháng kế tiếp của bạn?')) return;
+              try { await resetMyNextMonthSchedule(); toast.success('Đã xóa'); load(); } catch { toast.error('Xóa thất bại'); }
+            }}
+          >
+            Xóa toàn bộ tháng
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div className={styles.legend}>
+          <div className={styles.legendItem}>
+            <div className={`${styles.legendColor} ${styles.legendWork}`}></div>
+            <span>Làm việc</span>
+          </div>
+          <div className={styles.legendItem}>
+            <div className={`${styles.legendColor} ${styles.legendOn}`}></div>
+            <span>Trực</span>
+          </div>
+          <div className={styles.legendItem}>
+            <div className={`${styles.legendColor} ${styles.legendOff}`}></div>
+            <span>Nghỉ</span>
+          </div>
+          <div className={styles.legendItem}>
+            <div className={`${styles.legendColor} ${styles.legendEmpty}`}></div>
+            <span>Chưa đăng ký</span>
+          </div>
+        </div>
+
+
+
+        {/* Help Card */}
+        <div className={styles.helpCard}>
+          <div className={styles.helpTitle}>💡 Hướng dẫn sử dụng</div>
+          <div className={styles.helpContent}>
+            <div className={styles.helpSection}>
+              <h4>🖱️ Cách thao tác:</h4>
+              <ul className={styles.helpList}>
+                <li><strong>Click thường:</strong> Mở popup để chọn loại ca (Làm việc/Trực/Nghỉ)</li>
+                <li><strong>Ctrl/Alt + Click:</strong> Chuyển đổi nhanh theo thứ tự</li>
+                <li><strong>Scroll ngang:</strong> Xem các ngày khác trong tháng</li>
+              </ul>
+            </div>
+            
+            <div className={styles.helpSection}>
+              <h4>🔄 Thứ tự chuyển đổi nhanh:</h4>
+              <div className={styles.cycleFlow}>
+                <span className={styles.cycleStep}>Trống</span>
+                <span className={styles.cycleArrow}>→</span>
+                <span className={styles.cycleStep}>💼 Làm việc</span>
+                <span className={styles.cycleArrow}>→</span>
+                <span className={styles.cycleStep}>🌙 Trực</span>
+                <span className={styles.cycleArrow}>→</span>
+                <span className={styles.cycleStep}>🏖️ Nghỉ</span>
+                <span className={styles.cycleArrow}>→</span>
+                <span className={styles.cycleStep}>🗑️ Xóa</span>
+              </div>
+            </div>
+            
+            <div className={styles.helpSection}>
+              <h4>📋 Quy định:</h4>
+              <ul className={styles.helpList}>
+                <li>Chỉ đăng ký từ ngày <strong>{config?.openFrom || (new Date().toISOString().slice(0,7)+'-15')}</strong> trở đi</li>
+                <li>Mỗi ngày có 3 ca: 🌅 Sáng, ☀️ Chiều, 🌙 Tối</li>
+                <li>Ca tối + Trực = Ca trực đêm (tính vào thống kê)</li>
+                <li>Tự động kiểm tra giới hạn số ca theo chức vụ</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+       
+
+        {/* Week Headers */}
+        <div className={styles.weekHeaderWrapper}>
+          <div className={styles.weekHeader}>
+            <div className={styles.weekDay}></div>
+            {days.map(d => {
+              const dayOfWeek = d.getDay();
+              const weekDays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+              return (
+                <div key={localDateStr(d)} className={styles.weekDay}>
+                  {weekDays[dayOfWeek]}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Schedule Grid */}
+        {loading ? (
+          <div className={styles.loadingSpinner}>
+            <div className={styles.spinner}></div>
+          </div>
+        ) : (
+          <div className={styles.scheduleWrapper}>
+            <div className={styles.scheduleGrid}>
+              {/* Header row */}
+              <div className={styles.dayHeader}>
+                <div>Ca/Ngày</div>
+              </div>
+              {days.map(d => {
+                const dayOfWeek = d.getDay();
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                return (
+                  <div key={localDateStr(d)} className={`${styles.dayHeader} ${isWeekend ? styles.weekend : ''}`}>
+                    <div>{d.getDate()}</div>
+                    {localDateStr(d) === todayStr && <div className={styles.todayMark}>●</div>}
+                  </div>
+                );
+              })}
+
+              {/* Shift rows */}
+              {shifts.map(sh => (
+                <React.Fragment key={sh}>
+                  <div className={styles.shiftLabel}>
+                    {sh === 'sang' ? '🌅 Sáng' : sh === 'chieu' ? '☀️ Chiều' : '🌙 Tối'}
+                  </div>
+                  {days.map(d => {
+                    const cell = getCell(d, sh);
+                    const isToday = localDateStr(d) === todayStr;
+                    let cellClass = styles.scheduleCell;
+                    
+                    // Enhanced color coding based on shift and type
+                    if (cell) {
+                      if (cell.shiftType === 'lam_viec') {
+                        if (sh === 'sang') cellClass += ` ${styles.cellMorning}`;
+                        else if (sh === 'chieu') cellClass += ` ${styles.cellAfternoon}`;
+                        else cellClass += ` ${styles.cellEvening}`;
+                      } else if (cell.shiftType === 'truc') {
+                        cellClass += ` ${styles.cellOn}`;
+                      } else if (cell.shiftType === 'nghi') {
+                        cellClass += ` ${styles.cellOff}`;
+                      }
+                    } else {
+                      cellClass += ` ${styles.cellEmpty}`;
+                    }
+                    
+                    if (isToday) cellClass += ` ${styles.todayCell}`;
+
+                    return (
+                      <div
+                        key={sh + localDateStr(d)}
+                        className={cellClass}
+                        onClick={(e) => handleClick(d, sh, e)}
+                        title={`${sh === 'sang' ? 'Ca sáng' : sh === 'chieu' ? 'Ca chiều' : 'Ca tối'} ngày ${d.getDate()} - ${cell ? shiftTypeLabel[cell.shiftType] : 'Click để đăng ký'}`}
+                      >
+                        {cell ? (
+                          <>
+                            <span className={styles.shiftText}>{shiftTypeLabel[cell.shiftType]}</span>
+                            {cell.shiftType === 'truc' && <div className={styles.shiftIndicator}></div>}
+                          </>
+                        ) : (
+                          <span className={styles.emptyText}>+</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Enhanced Modal */}
+        {modal && (
+          <div className={styles.modal} onClick={() => setModal(null)}>
+            <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <div className={styles.modalTitle}>
+                  {modal.shift === 'sang' ? '🌅' : modal.shift === 'chieu' ? '☀️' : '🌙'} 
+                  Ca {modal.shift === 'sang' ? 'Sáng' : modal.shift === 'chieu' ? 'Chiều' : 'Tối'}
+                </div>
+                <div className={styles.modalSubtitle}>
+                  Ngày {modal.day?.getDate()} tháng {formatMonth(modal.day).slice(-2)}
+                </div>
+                <button 
+                  className={styles.modalClose}
+                  onClick={() => setModal(null)}
+                  title="Đóng"
+                >
+                  ✕
+                </button>
+              </div>
+              
+              <div className={styles.modalBody}>
+                {modal.existing && (
+                  <div className={styles.currentStatus}>
+                    <span className={styles.currentLabel}>Hiện tại:</span>
+                    <span className={`${styles.currentValue} ${styles[`status${modal.existing.shiftType}`]}`}>
+                      {modal.existing.shiftType === 'lam_viec' ? '💼' : 
+                       modal.existing.shiftType === 'truc' ? '🌙' : '🏖️'} 
+                      {shiftTypeLabel[modal.existing.shiftType]}
+                    </span>
+                  </div>
+                )}
+                
+                <div className={styles.optionLabel}>
+                  {modal.existing ? 'Thay đổi thành:' : 'Chọn loại ca:'}
+                </div>
+                
+                <div className={styles.shiftTypeGrid}>
+                  {shiftTypes.map(type => {
+                    const isSelected = modal.existing?.shiftType === type;
+                    const icons = { lam_viec: '💼', truc: '🌙', nghi: '🏖️' };
+                    const colors = { lam_viec: 'work', truc: 'duty', nghi: 'off' };
+                    
+                    return (
+                      <button 
+                        key={type} 
+                        className={`${styles.shiftTypeBtn} ${styles[colors[type]]} ${isSelected ? styles.selected : ''}`}
+                        onClick={() => save(type)}
+                        disabled={isSelected}
+                      >
+                        <div className={styles.btnIcon}>{icons[type]}</div>
+                        <div className={styles.btnLabel}>{shiftTypeLabel[type]}</div>
+                        {type === 'truc' && modal.shift === 'toi' && (
+                          <div className={styles.btnNote}>Ca đêm</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              
+              <div className={styles.modalFooter}>
+                {modal.existing && (
+                  <button 
+                    className={`${styles.actionBtn} ${styles.deleteBtn}`} 
+                    onClick={clearCell}
+                    title="Xóa ca này"
+                  >
+                    🗑️ Xóa ca
+                  </button>
+                )}
+                <button 
+                  className={`${styles.actionBtn} ${styles.cancelBtn}`} 
+                  onClick={() => setModal(null)}
+                >
+                  Hủy
+                </button>
+              </div>
+              
+              <div className={styles.modalTip}>
+                💡 <strong>Mẹo:</strong> Dùng Ctrl/Alt + Click để chuyển đổi nhanh
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

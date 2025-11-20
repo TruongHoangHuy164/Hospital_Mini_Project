@@ -11,6 +11,7 @@ export default function Users() {
   const [roleFilter, setRoleFilter] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [profileModal, setProfileModal] = useState(null); // { open: bool, profile: {} }
   const me = useMemo(() => {
     try {
       const t = localStorage.getItem('accessToken');
@@ -98,6 +99,7 @@ export default function Users() {
             <option value="doctor">Doctor</option>
             <option value="reception">Reception</option>
             <option value="lab">Lab</option>
+            <option value="pharmacy">Pharmacy</option>
             <option value="cashier">Cashier</option>
             <option value="nurse">Nurse</option>
             <option value="admin">Admin</option>
@@ -119,6 +121,7 @@ export default function Users() {
             <tr>
               <th>Tên</th>
               <th>Email</th>
+              <th>SĐT</th>
               <th>Vai trò</th>
               <th>Trạng thái</th>
               <th>Ngày tạo</th>
@@ -130,12 +133,14 @@ export default function Users() {
               <tr key={u._id}>
                 <td>{u.name}</td>
                 <td>{u.email}</td>
+                <td>{u.phone || '-'}</td>
                 <td>
                   <select className="form-select form-select-sm" value={u.role} onChange={(e)=>updateRole(u._id, e.target.value)}>
                     <option value="user">User</option>
                     <option value="doctor">Doctor</option>
                     <option value="reception">Reception</option>
-                    <option value="lab">Lab</option>
+                      <option value="lab">Lab</option>
+                      <option value="pharmacy">Pharmacy</option>
                     <option value="cashier">Cashier</option>
                     <option value="nurse">Nurse</option>
                     <option value="admin">Admin</option>
@@ -151,6 +156,14 @@ export default function Users() {
                 <td>{u.createdAt ? new Date(u.createdAt).toLocaleString() : '-'}</td>
                 <td className="text-end">
                   <div className="btn-group btn-group-sm">
+                    <button className="btn btn-outline-secondary" onClick={async()=>{
+                      try{
+                        const res = await fetch(`${API_URL}/api/users/${u._id}/profile`, { headers });
+                        const json = await res.json();
+                        if(!res.ok) throw json;
+                        setProfileModal({ open: true, profile: json });
+                      }catch(err){ alert(err?.message || 'Không tải được thông tin'); }
+                    }}>Chi tiết</button>
                     <button
                       className={`btn ${u.isLocked ? 'btn-success' : 'btn-outline-danger'}`}
                       onClick={()=>toggleLock(u)}
@@ -177,6 +190,39 @@ export default function Users() {
           <button className="btn btn-outline-secondary" disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)}>Sau</button>
         </div>
       </div>
+
+      {profileModal && profileModal.open && (
+        <div className="modal d-block" tabIndex="-1" role="dialog" onClick={()=> setProfileModal(null)}>
+          <div className="modal-dialog" onClick={e=> e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Thông tin hồ sơ</h5>
+                <button type="button" className="btn-close" onClick={()=> setProfileModal(null)}></button>
+              </div>
+              <div className="modal-body">
+                {profileModal.profile ? (
+                  <div>
+                    <p><strong>Họ tên:</strong> {profileModal.profile.hoTen || '-'}</p>
+                    <p><strong>Email:</strong> {profileModal.profile.email || '-'}</p>
+                    <p><strong>SĐT:</strong> {profileModal.profile.soDienThoai || '-'}</p>
+                    <p><strong>Giới tính:</strong> {profileModal.profile.gioiTinh || '-'}</p>
+                    <p><strong>Ngày sinh:</strong> {profileModal.profile.ngaySinh ? new Date(profileModal.profile.ngaySinh).toLocaleDateString() : '-'}</p>
+                    <p><strong>Địa chỉ:</strong> {profileModal.profile.diaChi || '-'}</p>
+                    <p><strong>Mã BHYT:</strong> {profileModal.profile.maBHYT || '-'}</p>
+                    <p><strong>Vai trò:</strong> {profileModal.profile.role || '-'}</p>
+                    <p><strong>Ngày tạo user:</strong> {profileModal.profile.createdAt ? new Date(profileModal.profile.createdAt).toLocaleString() : '-'}</p>
+                  </div>
+                ) : (
+                  <div>Đang tải...</div>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-secondary" onClick={()=> setProfileModal(null)}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

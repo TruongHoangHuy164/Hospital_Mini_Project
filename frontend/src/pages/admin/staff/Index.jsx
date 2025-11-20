@@ -50,6 +50,7 @@ export default function StaffIndex(){
             <option value="reception">Lễ tân</option>
             <option value="lab">Cận lâm sàng</option>
             <option value="cashier">Thu ngân</option>
+            <option value="pharmacy">Nhà thuốc</option>
             <option value="nurse">Điều dưỡng</option>
           </select>
         </div>

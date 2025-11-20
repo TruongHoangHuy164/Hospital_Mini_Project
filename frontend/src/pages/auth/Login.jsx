@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import ServerStatusCheck from '../../components/ServerStatusCheck';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -14,11 +14,13 @@ export default function Login() {
     e.preventDefault();
     setError('');
     try {
-      const u = await signIn(email, password);
+      const u = await signIn(identifier, password);
       if (u?.role === 'admin') {
         navigate('/admin/overview');
       } else if (u?.role === 'doctor') {
         navigate('/doctor/dashboard');
+      } else if (u?.role === 'pharmacy') {
+        navigate('/pharmacy/dashboard');
       } else if (u?.role === 'reception') {
         navigate('/reception/dashboard');
       } else if (u?.role === 'lab') {
@@ -42,8 +44,8 @@ export default function Login() {
       {error && <div className="alert alert-danger">{error}</div>}
       <form onSubmit={onSubmit}>
         <div className="mb-3">
-          <label className="form-label">Email</label>
-          <input type="email" className="form-control" value={email} onChange={(e)=>setEmail(e.target.value)} required />
+          <label className="form-label">Email hoặc Số điện thoại</label>
+          <input type="text" className="form-control" value={identifier} onChange={(e)=>setIdentifier(e.target.value)} required />
         </div>
         <div className="mb-3">
           <label className="form-label">Mật khẩu</label>

@@ -49,6 +49,7 @@ export default function StaffEdit(){
           <select name="vaiTro" className="form-select" value={form.vaiTro} onChange={onChange}>
             <option value="reception">Lễ tân</option>
             <option value="lab">Cận lâm sàng</option>
+            <option value="pharmacy">Nhà thuốc</option>
             <option value="cashier">Thu ngân</option>
             <option value="nurse">Điều dưỡng</option>
           </select>

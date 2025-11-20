@@ -18,6 +18,9 @@ export default function Navbar() {
         {isAuthenticated && user?.role === 'admin' && (
           <Link to="/admin/overview" className="nav__item"><i className="bi bi-speedometer2"></i> Admin</Link>
         )}
+        {isAuthenticated && user?.role === 'pharmacy' && (
+          <Link to="/pharmacy" className="nav__item"><i className="bi bi-capsule"></i> Nhà thuốc</Link>
+        )}
         {!isAuthenticated ? (
           <>
             <Link to="/login" className="nav__item"><i className="bi bi-box-arrow-in-right"></i> Đăng nhập</Link>
