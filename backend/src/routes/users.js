@@ -35,13 +35,66 @@ router.get('/', auth, authorize('admin'), async (req, res, next) => {
       User.countDocuments(filter),
     ]);
 
-    return res.json({
-      items,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    });
+    // Attach phone (soDienThoai) from BenhNhan if available (single query)
+    try {
+      const userIds = items.map(u => String(u._id));
+      const phones = await BenhNhan.find({ userId: { $in: userIds } }).select('userId soDienThoai');
+      const phoneMap = {};
+      for (const p of phones) phoneMap[String(p.userId)] = p.soDienThoai || '';
+      const itemsWithPhone = items.map(u => {
+        const obj = (u.toObject ? u.toObject() : u);
+        // Prefer phone stored on User model; fallback to BenhNhan.soDienThoai
+        obj.phone = obj.phone || phoneMap[String(obj._id)] || '';
+        return obj;
+      });
+
+      return res.json({
+        items: itemsWithPhone,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    } catch (e) {
+      // If anything goes wrong attaching phones, still return users without phones
+      return res.json({
+        items,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      });
+    }
+  } catch (err) {
+    return next(err);
+  }
+});
+
+// GET /api/users/:id/profile - admin can fetch any user's combined profile
+router.get('/:id/profile', auth, authorize('admin'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
+    if (!user) return res.status(404).json({ message: 'Người dùng không tồn tại' });
+
+    // Find benhNhan record (latest)
+    const benhNhan = await BenhNhan.findOne({ userId: id }).sort({ createdAt: -1 });
+
+    const profile = {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt,
+      hoTen: benhNhan?.hoTen || user.name || '',
+      ngaySinh: benhNhan?.ngaySinh || null,
+      gioiTinh: benhNhan?.gioiTinh || null,
+      diaChi: benhNhan?.diaChi || '',
+      soDienThoai: benhNhan?.soDienThoai || '',
+      maBHYT: benhNhan?.maBHYT || '',
+      benhNhanId: benhNhan?._id || null,
+    };
+
+    return res.json(profile);
   } catch (err) {
     return next(err);
   }
