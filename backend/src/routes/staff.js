@@ -34,7 +34,7 @@ router.post('/', async (req, res, next) => {
   try{
     const body = req.body || {};
     if(!body.hoTen || !body.vaiTro){ return res.status(400).json({ message: 'Thiếu thông tin bắt buộc' }); }
-  if(!['reception','lab','cashier','nurse'].includes(body.vaiTro)) return res.status(400).json({ message: 'vaiTro không hợp lệ' });
+  if(!['reception','lab','cashier','nurse','pharmacy'].includes(body.vaiTro)) return res.status(400).json({ message: 'vaiTro không hợp lệ' });
     if(body.phongKhamId){ const pk = await PhongKham.findById(body.phongKhamId); if(!pk) return res.status(400).json({ message: 'Phòng khám không tồn tại' }); }
     const st = await Staff.create(body);
     res.status(201).json(st);
@@ -82,7 +82,7 @@ router.post('/:id/provision-account', async (req, res, next) => {
     const exists = await User.findOne({ email });
     if(exists) return res.status(400).json({ message: 'Email đã tồn tại' });
 
-  const allowedMap = { reception: 'reception', lab: 'lab', cashier: 'cashier', nurse: 'nurse' };
+  const allowedMap = { reception: 'reception', lab: 'lab', cashier: 'cashier', nurse: 'nurse', pharmacy: 'pharmacy' };
   const role = allowedMap[st.vaiTro] || 'reception';
     const user = await User.create({ name: st.hoTen, email, password, role });
     st.userId = user._id;

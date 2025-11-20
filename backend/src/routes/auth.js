@@ -21,7 +21,7 @@ function getJwtSecrets() {
 const router = express.Router();
 
 function signAccessToken(user) {
-  const payload = { id: user._id, email: user.email, name: user.name, role: user.role };
+  const payload = { id: user._id, email: user.email, phone: user.phone, name: user.name, role: user.role };
   const { accessSecret: secret } = getJwtSecrets();
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
   return jwt.sign(payload, secret, { expiresIn });
@@ -37,24 +37,32 @@ function signRefreshToken(user, tokenId) {
 // POST /api/auth/register
 router.post('/register', async (req, res, next) => {
   try {
-    const { name, email, password } = req.body || {};
-    if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Thiếu name, email hoặc password' });
+    const { name, email, phone, password } = req.body || {};
+    if (!name || !password || (!email && !phone)) {
+      return res.status(400).json({ message: 'Thiếu name, password và (email hoặc phone)' });
     }
 
-    const existing = await User.findOne({ email });
-    if (existing) {
-      return res.status(409).json({ message: 'Email đã tồn tại' });
+    // Normalize phone: remove non-digits
+    let phoneNorm = null;
+    if (phone) phoneNorm = String(phone).replace(/[^0-9+]/g, '');
+
+    if (email) {
+      const existing = await User.findOne({ email: String(email).toLowerCase().trim() });
+      if (existing) return res.status(409).json({ message: 'Email đã tồn tại' });
+    }
+    if (phoneNorm) {
+      const existingPhone = await User.findOne({ phone: phoneNorm });
+      if (existingPhone) return res.status(409).json({ message: 'Số điện thoại đã tồn tại' });
     }
 
-    const user = await User.create({ name, email, password });
+    const user = await User.create({ name, email: email ? String(email).toLowerCase().trim() : undefined, phone: phoneNorm || undefined, password });
     const tokenId = newTokenId();
     user.refreshTokenIds.push(tokenId);
     await user.save();
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user, tokenId);
     return res.status(201).json({
-      user: { id: user._id, name: user.name, email: user.email, role: user.role },
+      user: { id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role },
       accessToken,
       refreshToken,
     });
@@ -66,14 +74,28 @@ router.post('/register', async (req, res, next) => {
 // POST /api/auth/login
 router.post('/login', async (req, res, next) => {
   try {
-    const { email, password } = req.body || {};
-    if (!email || !password) {
-      return res.status(400).json({ message: 'Thiếu email hoặc password' });
+    const { email, phone, identifier, password } = req.body || {};
+    if ((!email && !phone && !identifier) || !password) {
+      return res.status(400).json({ message: 'Thiếu identifier (email hoặc phone) hoặc password' });
     }
 
-    const user = await User.findOne({ email });
+    let user;
+    if (email) {
+      user = await User.findOne({ email: String(email).toLowerCase().trim() });
+    } else if (phone) {
+      const p = String(phone).replace(/[^0-9+]/g, '');
+      user = await User.findOne({ phone: p });
+    } else if (identifier) {
+      if (String(identifier).includes('@')) {
+        user = await User.findOne({ email: String(identifier).toLowerCase().trim() });
+      } else {
+        const p = String(identifier).replace(/[^0-9+]/g, '');
+        user = await User.findOne({ phone: p });
+      }
+    }
+
     if (!user) {
-      return res.status(401).json({ message: 'Sai email hoặc password' });
+      return res.status(401).json({ message: 'Sai thông tin đăng nhập hoặc password' });
     }
 
     if (user.isLocked) {
@@ -82,7 +104,7 @@ router.post('/login', async (req, res, next) => {
 
     const ok = await user.comparePassword(password);
     if (!ok) {
-      return res.status(401).json({ message: 'Sai email hoặc password' });
+      return res.status(401).json({ message: 'Sai thông tin đăng nhập hoặc password' });
     }
 
     const tokenId = newTokenId();
@@ -91,7 +113,7 @@ router.post('/login', async (req, res, next) => {
     const accessToken = signAccessToken(user);
     const refreshToken = signRefreshToken(user, tokenId);
     return res.status(200).json({
-      user: { id: user._id, name: user.name, email: user.email, role: user.role, isLocked: !!user.isLocked },
+      user: { id: user._id, name: user.name, email: user.email, phone: user.phone, role: user.role, isLocked: !!user.isLocked },
       accessToken,
       refreshToken,
     });
