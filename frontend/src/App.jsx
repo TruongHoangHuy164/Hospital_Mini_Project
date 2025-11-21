@@ -76,6 +76,8 @@ import CashierPayments from './pages/cashier/Payments'
 import CashierInvoices from './pages/cashier/Invoices'
 import CashierReports from './pages/cashier/Reports'
 import MySchedule from './pages/shared/MySchedule'
+import ReceptionSchedule from './pages/reception/Schedule'
+import ReceptionDoctors from './pages/reception/Doctors'
 
 export default function App() {
   return (
@@ -143,6 +145,8 @@ export default function App() {
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />
         <Route path="my-schedule" element={<MySchedule />} />
+        <Route path="schedule" element={<ReceptionSchedule />} />
+        <Route path="doctors" element={<ReceptionDoctors />} />
       </Route>
 
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>

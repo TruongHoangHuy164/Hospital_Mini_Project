@@ -1,0 +1,23 @@
+.rc-page { }
+.rc-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.rc-title { font-size:1.5rem; font-weight:600; margin:0; }
+.rc-subtitle { color:#6c757d; margin-left:8px; font-weight:400; font-size:1rem; }
+.rc-actions { display:flex; gap:8px; }
+
+.rc-card { background:#fff; border:1px solid #e9ecef; border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,.03); margin-bottom:16px; }
+.rc-card-header { padding:10px 14px; border-bottom:1px solid #edf1f5; display:flex; align-items:center; justify-content:space-between; }
+.rc-card-title { margin:0; font-weight:600; font-size:1.05rem; }
+.rc-card-body { padding:12px 14px; }
+
+.rc-table { width:100%; }
+.rc-table thead th { background:#f8f9fa; position:sticky; top:0; z-index:1; }
+.rc-table tbody tr:nth-child(odd) { background:#fcfdff; }
+.rc-table td, .rc-table th { vertical-align:middle; }
+
+.rc-list { list-style:none; padding:0; margin:0; }
+.rc-list-item { padding:10px 12px; border-bottom:1px solid #f0f2f5; cursor:pointer; }
+.rc-list-item:hover { background:#f8f9fb; }
+.rc-list-item.active { background:#eef3ff; }
+
+.rc-search { display:flex; gap:8px; }
+.rc-search input { flex:1; }

@@ -31,7 +31,14 @@ export default function ReceptionAppointments(){
 
   async function createAppointment(){
     try{
-      const res = await fetch(`${API_URL}/api/booking/appointments`, { method:'POST', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ benhNhanId, bacSiId: selected.bacSiId, chuyenKhoaId, date, khungGio: selected.khungGio }) });
+      const res = await fetch(`${API_URL}/api/booking/appointments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}`,
+        },
+        body: JSON.stringify({ benhNhanId, bacSiId: selected.bacSiId, chuyenKhoaId, date, khungGio: selected.khungGio })
+      });
       const json = await res.json();
       if(!res.ok) throw json;
       setAppt(json);
@@ -40,7 +47,10 @@ export default function ReceptionAppointments(){
 
   async function payAndQueue(){
     try{
-      const res = await fetch(`${API_URL}/api/booking/appointments/${appt._id}/pay`, { method:'POST' });
+      const res = await fetch(`${API_URL}/api/booking/appointments/${appt._id}/pay`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}` }
+      });
       const json = await res.json();
       if(!res.ok) throw json;
       alert(`Số thứ tự: ${json.soThuTu?.soThuTu}`);

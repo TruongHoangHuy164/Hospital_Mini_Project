@@ -22,6 +22,7 @@ const publicRouter = require('./routes/public');
 const aiRouter = require('./routes/ai');
 const pharmacyRouter = require('./routes/pharmacy');
 const workSchedulesRouter = require('./routes/workSchedules');
+const patientsRouter = require('./routes/patients');
 
 const app = express();
 
@@ -54,6 +55,8 @@ app.use('/api/services', auth, authorize('admin'), servicesRouter);
 app.use('/api/work-schedules', auth, authorize('admin','doctor','reception','lab','cashier','nurse'), workSchedulesRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/patient-profiles', patientProfilesRouter);
+// Patient search for receptionists/admins
+app.use('/api/patients', auth, patientsRouter);
 app.use('/api/public', publicRouter);
 app.use('/api/ai', aiRouter);
 // Pharmacy routes (staff with role 'pharmacy' or admin)

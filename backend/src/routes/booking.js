@@ -316,6 +316,95 @@ router.get('/appointments', async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
+// GET /api/booking/doctor-appointments?bacSiId=...&date=YYYY-MM-DD
+// Trả về danh sách lịch khám của 1 bác sĩ theo ngày (dành cho reception / admin / chính bác sĩ)
+router.get('/doctor-appointments', auth, async (req, res, next) => {
+  try {
+    const { bacSiId, date } = req.query;
+    if(!bacSiId) return res.status(400).json({ message: 'Thiếu bacSiId' });
+    const doctorId = new mongoose.Types.ObjectId(bacSiId);
+    let dayFilter = {};
+    if(date){
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
+      dayFilter = { ngayKham: { $gte: startOfDay(d), $lt: endOfDay(d) } };
+    }
+    // Role kiểm tra: admin hoặc reception hoặc chính bác sĩ (user có id == bacSi.userId) - hiện BacSi model chưa populate userId ở đây nên tạm chấp nhận admin/reception
+    if(!['admin','reception'].includes(req.user.role)){
+      // Cho phép người đặt xem lịch họ đặt với bác sĩ này (lọc theo nguoiDatId)
+      // Nếu muốn bác sĩ xem lịch của mình cần mapping user -> bacSi, bỏ qua ở đây nếu thiếu dữ liệu
+      return res.status(403).json({ message: 'Không có quyền xem lịch bác sĩ' });
+    }
+    const appts = await LichKham.find({ bacSiId: doctorId, ...dayFilter })
+      .sort({ khungGio: 1 })
+      .populate('benhNhanId','hoTen')
+      .populate('hoSoBenhNhanId','hoTen');
+    const result = appts.map(a => ({
+      _id: a._id,
+      ngayKham: a.ngayKham,
+      khungGio: a.khungGio,
+      trangThai: a.trangThai,
+      benhNhanHoTen: a.hoSoBenhNhanId ? a.hoSoBenhNhanId.hoTen : (a.benhNhanId ? a.benhNhanId.hoTen : 'N/A')
+    }));
+    res.json(result);
+  } catch(err){ return next(err); }
+});
+
+// PUT /api/booking/appointments/:id/time  { khungGio, date }
+// Chỉnh sửa khung giờ hoặc ngày khám (chỉ admin / reception)
+router.put('/appointments/:id/time', auth, async (req,res,next)=>{
+  try {
+    if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền sửa lịch khám' });
+    const { id } = req.params;
+    const { khungGio, date } = req.body || {};
+    if(!khungGio && !date) return res.status(400).json({ message: 'Cần cung cấp khungGio hoặc date để sửa' });
+    const appt = await LichKham.findById(id);
+    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
+    if(appt.trangThai === 'da_kham') return res.status(400).json({ message: 'Không thể sửa lịch đã khám' });
+    if(date){
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
+      appt.ngayKham = startOfDay(d);
+    }
+    if(khungGio){ appt.khungGio = khungGio; }
+    try {
+      await appt.save();
+    } catch(err){
+      if(err && err.code === 11000) return res.status(409).json({ message: 'Trùng bác sĩ/ngày/khung giờ' });
+      throw err;
+    }
+    res.json({ ok: true, appointment: appt });
+  } catch(err){ return next(err); }
+});
+
+// PUT /api/booking/appointments/:id/reassign { bacSiId, khungGio?, date? }
+// Đổi bác sĩ và/hoặc giờ khám (admin / reception)
+router.put('/appointments/:id/reassign', auth, async (req,res,next)=>{
+  try {
+    if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền đổi bác sĩ/giờ' });
+    const { id } = req.params;
+    const { bacSiId, khungGio, date } = req.body || {};
+    if(!bacSiId) return res.status(400).json({ message: 'Thiếu bacSiId mới' });
+    const appt = await LichKham.findById(id);
+    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
+    if(appt.trangThai === 'da_kham') return res.status(400).json({ message: 'Không thể đổi lịch đã khám' });
+    // Validate doctor exists
+    const doctor = await BacSi.findById(bacSiId).select('_id chuyenKhoa');
+    if(!doctor) return res.status(404).json({ message: 'Bác sĩ mới không tồn tại' });
+    appt.bacSiId = doctor._id;
+    if(date){
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
+      appt.ngayKham = startOfDay(d);
+    }
+    if(khungGio){ appt.khungGio = khungGio; }
+    try {
+      await appt.save();
+    } catch(err){
+      if(err && err.code === 11000) return res.status(409).json({ message: 'Trùng bác sĩ/ngày/khung giờ' });
+      throw err;
+    }
+    res.json({ ok: true, appointment: appt });
+  } catch(err){ return next(err); }
+});
+
 
 
 // DELETE /api/booking/appointments/:id - cancel appointment

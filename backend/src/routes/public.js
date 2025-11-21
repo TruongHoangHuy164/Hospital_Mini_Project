@@ -27,3 +27,17 @@ router.get('/specialties', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// Public: list doctors (basic info) for selection in UI
+// GET /api/public/doctors?q=&limit=20
+router.get('/doctors', async (req, res, next) => {
+  try{
+    const BacSi = require('../models/BacSi');
+    const q = (req.query.q || '').trim();
+    const limit = Math.min(parseInt(req.query.limit||'50',10), 200);
+    const filter = {};
+    if(q) filter.hoTen = { $regex: q, $options: 'i' };
+    const items = await BacSi.find(filter).select('hoTen chuyenKhoa phongKhamId userId').limit(limit).sort({ hoTen: 1 });
+    res.json(items);
+  }catch(err){ next(err); }
+});

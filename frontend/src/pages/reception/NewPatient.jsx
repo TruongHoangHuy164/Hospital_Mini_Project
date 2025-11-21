@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function NewPatient(){
-  const [form, setForm] = useState({ hoTen: '', soDienThoai: '', ngaySinh: '', gioiTinh: 'khac', diaChi: '' });
+  const [form, setForm] = useState({ hoTen: '', soDienThoai: '', maBHYT: '', ngaySinh: '', gioiTinh: 'khac', diaChi: '' });
   const [error, setError] = useState('');
   const [ok, setOk] = useState('');
   const onChange = e => setForm({ ...form, [e.target.name]: e.target.value });
@@ -24,6 +24,7 @@ export default function NewPatient(){
       <form className="row g-3" onSubmit={submit}>
         <div className="col-md-6"><label className="form-label">Họ tên</label><input required name="hoTen" className="form-control" value={form.hoTen} onChange={onChange} /></div>
         <div className="col-md-6"><label className="form-label">Số điện thoại</label><input name="soDienThoai" className="form-control" value={form.soDienThoai} onChange={onChange} /></div>
+        <div className="col-md-6"><label className="form-label">Mã BHYT</label><input name="maBHYT" className="form-control" value={form.maBHYT} onChange={onChange} /></div>
         <div className="col-md-4"><label className="form-label">Ngày sinh</label><input name="ngaySinh" type="date" className="form-control" value={form.ngaySinh} onChange={onChange} /></div>
         <div className="col-md-4"><label className="form-label">Giới tính</label>
           <select name="gioiTinh" className="form-select" value={form.gioiTinh} onChange={onChange}>

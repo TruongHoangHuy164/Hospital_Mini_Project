@@ -1,20 +1,37 @@
 import React from 'react';
+import PageHeader from '../../components/reception/PageHeader'
+import Card from '../../components/reception/Card'
+import { NavLink } from 'react-router-dom'
 
 export default function ReceptionDashboard(){
+  const tiles = [
+    { to:'/reception/intake', icon:'bi-person-plus', text:'Tiếp nhận bệnh nhân' },
+    { to:'/reception/patients/new', icon:'bi-file-earmark-plus', text:'Tạo hồ sơ bệnh nhân' },
+    { to:'/reception/queue', icon:'bi-123', text:'Cấp số thứ tự' },
+    { to:'/reception/appointments', icon:'bi-calendar-check', text:'Quản lý lịch hẹn' },
+    { to:'/reception/doctors', icon:'bi-people', text:'Danh sách bác sĩ & đổi lịch' },
+    { to:'/reception/lookup', icon:'bi-search', text:'Tra cứu bệnh nhân' },
+    { to:'/reception/print', icon:'bi-printer', text:'In số/hoá đơn' },
+  ];
   return (
-    <div>
-      <h3>Bảng điều khiển lễ tân</h3>
-      <ul>
-        <li>Tiếp nhận bệnh nhân</li>
-        <li>Tạo hồ sơ bệnh nhân mới</li>
-        <li>Cấp số thứ tự khám bệnh</li>
-        <li>Gán lịch hẹn cho bác sĩ</li>
-        <li>Quản lý lịch hẹn</li>
-        <li>Điều chỉnh khi bác sĩ đổi lịch</li>
-        <li>Thông báo cho bệnh nhân</li>
-        <li>Tra cứu thông tin bệnh nhân</li>
-        <li>In số thứ tự, hóa đơn, giấy tờ</li>
-      </ul>
+    <div className="container rc-page">
+      <PageHeader title="Bảng điều khiển lễ tân" />
+      <Card>
+        <div className="row g-3">
+          {tiles.map(t => (
+            <div key={t.to} className="col-12 col-sm-6 col-lg-4">
+              <NavLink to={t.to} className="text-decoration-none">
+                <div className="rc-card h-100">
+                  <div className="rc-card-body d-flex align-items-center gap-3">
+                    <i className={`bi ${t.icon} fs-3 text-primary`}></i>
+                    <div className="fw-semibold text-dark">{t.text}</div>
+                  </div>
+                </div>
+              </NavLink>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
