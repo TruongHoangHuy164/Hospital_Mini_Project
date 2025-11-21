@@ -135,20 +135,8 @@ router.put('/:id', async (req, res, next) => {
     const targetDay = update.day || existing.day;
     try { assertNextMonth(targetDay); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-<<<<<<< HEAD
     if(req.user.role !== 'admin' && String(existing.userId) !== String(req.user.id)){
       return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
-=======
-    // Allow admin to edit any. Reception can edit schedules for doctors.
-    if(req.user.role !== 'admin'){
-      if(req.user.role === 'reception'){
-        // reception may edit only schedules that belong to doctors
-        const targetUser = await User.findById(existing.userId).select('role');
-        if(!targetUser || targetUser.role !== 'doctor') return res.status(403).json({ message: 'Reception chỉ được sửa lịch bác sĩ' });
-      } else if(existing.userId !== req.user.id){
-        return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
-      }
->>>>>>> Huong
     }
     const doc = await WorkSchedule.findByIdAndUpdate(req.params.id, update, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy' });
@@ -166,19 +154,8 @@ router.delete('/:id', async (req, res, next) => {
     const existing = await WorkSchedule.findById(req.params.id);
     if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
-<<<<<<< HEAD
     if(req.user.role !== 'admin' && String(existing.userId) !== String(req.user.id)){
       return res.status(403).json({ message: 'Không được xóa lịch của người khác' });
-=======
-    // Allow admin to delete any. Reception can delete schedules for doctors.
-    if(req.user.role !== 'admin'){
-      if(req.user.role === 'reception'){
-        const targetUser = await User.findById(existing.userId).select('role');
-        if(!targetUser || targetUser.role !== 'doctor') return res.status(403).json({ message: 'Reception chỉ được xóa lịch bác sĩ' });
-      } else if(existing.userId !== req.user.id){
-        return res.status(403).json({ message: 'Không được xóa lịch của người khác' });
-      }
->>>>>>> Huong
     }
     const r = await WorkSchedule.findByIdAndDelete(req.params.id);
     res.json({ ok: true });
