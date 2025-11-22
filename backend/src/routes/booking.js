@@ -455,19 +455,51 @@ router.get('/queues', async (req, res, next) => {
     if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
     const dayStart = startOfDay(d), dayEnd = endOfDay(d);
     // find appts in date range
-    const appts = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd }, ...(bacSiId? { bacSiId } : {}) }).select('_id benhNhanId bacSiId khungGio').lean();
+    const appts = await LichKham.find({ 
+      ngayKham: { $gte: dayStart, $lt: dayEnd }, 
+      ...(bacSiId? { bacSiId } : {}) 
+    })
+    .populate({
+      path: 'bacSiId',
+      select: 'hoTen chuyenKhoa phongKhamId',
+      populate: {
+        path: 'phongKhamId',
+        select: 'tenPhong'
+      }
+    })
+    .populate('benhNhanId', 'hoTen soDienThoai')
+    .populate('hoSoBenhNhanId', 'hoTen soDienThoai')
+    .select('_id benhNhanId hoSoBenhNhanId bacSiId khungGio ngayKham')
+    .lean();
+    
     const stts = await SoThuTu.find({ lichKhamId: { $in: appts.map(a=>a._id) } }).select('lichKhamId soThuTu trangThai').lean();
-    const bnIds = appts.map(a=>a.benhNhanId);
-    const bns = await BenhNhan.find({ _id: { $in: bnIds } }).select('hoTen soDienThoai').lean();
-    const bnMap = bns.reduce((m,b)=>{ m[String(b._id)] = b; return m; },{});
     const sttMap = stts.reduce((m,s)=>{ m[String(s.lichKhamId)] = s; return m; },{});
-    const items = appts.map(a => ({
-      lichKhamId: a._id,
-      benhNhan: bnMap[String(a.benhNhanId)] || null,
-      khungGio: a.khungGio,
-      soThuTu: sttMap[String(a._id)]?.soThuTu || null,
-      trangThai: sttMap[String(a._id)]?.trangThai || 'dang_cho',
-    })).sort((x,y)=>{
+    
+    const items = appts.map(a => {
+      // Debug: log toàn bộ data để kiểm tra
+      console.log('📋 Appointment data:', {
+        bacSiId: a.bacSiId,
+        phongKhamId: a.bacSiId?.phongKhamId,
+        hasPhongKham: !!a.bacSiId?.phongKhamId
+      });
+      
+      return {
+        lichKhamId: a._id,
+        benhNhanId: a.benhNhanId?._id,
+        hoSoBenhNhanId: a.hoSoBenhNhanId?._id,
+        benhNhan: a.benhNhanId || a.hoSoBenhNhanId || null,
+        bacSi: a.bacSiId ? {
+          _id: a.bacSiId._id,
+          hoTen: a.bacSiId.hoTen,
+          chuyenKhoa: a.bacSiId.chuyenKhoa,
+          phongKham: a.bacSiId.phongKhamId || null
+        } : null,
+        khungGio: a.khungGio,
+        ngayKham: a.ngayKham,
+        soThuTu: sttMap[String(a._id)]?.soThuTu || null,
+        trangThai: sttMap[String(a._id)]?.trangThai || 'dang_cho',
+      };
+    }).sort((x,y)=>{
       const sx = x.soThuTu ?? 1e9; const sy = y.soThuTu ?? 1e9;
       if(sx!==sy) return sx-sy; return (x.khungGio||'').localeCompare(y.khungGio||'');
     });

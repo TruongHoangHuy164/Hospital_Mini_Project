@@ -15,12 +15,12 @@ export default function ReceptionLayout() {
             <ul className="nav nav-pills flex-column mb-auto w-100">
               <li className="nav-item"><NavLink to="/reception/dashboard" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-speedometer2 me-2"></i> Bảng điều khiển</NavLink></li>
               <li className="nav-item"><NavLink to="/reception/intake" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-person-plus me-2"></i> Tiếp nhận bệnh nhân</NavLink></li>
-              <li className="nav-item"><NavLink to="/reception/patients/new" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-file-earmark-plus me-2"></i> Tạo hồ sơ bệnh nhân</NavLink></li>
-              <li className="nav-item"><NavLink to="/reception/queue" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-123 me-2"></i> Cấp số thứ tự</NavLink></li>
-              <li className="nav-item"><NavLink to="/reception/appointments" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-calendar-check me-2"></i> Quản lý lịch hẹn</NavLink></li>
-              <li className="nav-item"><NavLink to="/reception/doctors" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-people me-2"></i> Danh sách bác sĩ</NavLink></li>
+              {/* <li className="nav-item"><NavLink to="/reception/patients/new" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-file-earmark-plus me-2"></i> Tạo hồ sơ bệnh nhân</NavLink></li> */}
+              <li className="nav-item"><NavLink to="/reception/queue" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-123 me-2"></i> Cấp số thứ tự & in STT </NavLink></li>
+              <li className="nav-item"><NavLink to="/reception/appointments" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-calendar-check me-2"></i> Đặt Lịch</NavLink></li>
+              <li className="nav-item"><NavLink to="/reception/doctors" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-people me-2"></i> Quản Lý Lịch Hẹn</NavLink></li>
               <li className="nav-item"><NavLink to="/reception/lookup" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-search me-2"></i> Tra cứu bệnh nhân</NavLink></li>
-              <li className="nav-item"><NavLink to="/reception/print" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-printer me-2"></i> In số/hoá đơn</NavLink></li>
+              {/* <li className="nav-item"><NavLink to="/reception/print" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-printer me-2"></i> In số/hoá đơn</NavLink></li> */}
               <li className="nav-item"><NavLink to="/reception/my-schedule" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-calendar-week me-2"></i> Lịch của tôi</NavLink></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>

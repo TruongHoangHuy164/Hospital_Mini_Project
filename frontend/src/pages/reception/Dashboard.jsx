@@ -7,8 +7,8 @@ export default function ReceptionDashboard(){
   const tiles = [
     { to:'/reception/intake', icon:'bi-person-plus', text:'Tiếp nhận bệnh nhân' },
     { to:'/reception/patients/new', icon:'bi-file-earmark-plus', text:'Tạo hồ sơ bệnh nhân' },
-    { to:'/reception/queue', icon:'bi-123', text:'Cấp số thứ tự' },
-    { to:'/reception/appointments', icon:'bi-calendar-check', text:'Quản lý lịch hẹn' },
+    { to:'/reception/queue', icon:'bi-123', text:'Cấp số thứ tự & in STT' },
+    { to:'/reception/appointments', icon:'bi-calendar-check', text:'Đặt lịch' },
     { to:'/reception/doctors', icon:'bi-people', text:'Danh sách bác sĩ & đổi lịch' },
     { to:'/reception/lookup', icon:'bi-search', text:'Tra cứu bệnh nhân' },
     { to:'/reception/print', icon:'bi-printer', text:'In số/hoá đơn' },

@@ -124,7 +124,7 @@ export default function ReceptionDoctors(){
   }
 
   return (
-    <div className="container rc-page">
+    <div className="rc-page">
       <PageHeader title="Danh sách bác sĩ" subtitle="& quản lý lịch hẹn" />
       {msg && <div className="alert alert-warning">{msg}</div>}
 
