@@ -250,8 +250,9 @@ router.post('/reset-password', async (req, res, next) => {
       return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
     }
 
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(password, salt);
+    // Ghi trực tiếp mật khẩu mới (plaintext) để pre-save hook tự hash.
+    // Tránh double-hash (trước đây đã hash thủ công rồi lại bị hook hash lần nữa làm sai mật khẩu).
+    user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
