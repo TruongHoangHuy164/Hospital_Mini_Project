@@ -177,39 +177,78 @@ router.post('/logout', async (req, res, next) => {
   }
 });
 
-// POST /api/auth/forgot-password
+// OTP helpers
+function generateOTP(length = 6) {
+  // Returns zero-padded numeric OTP
+  return String(Math.floor(Math.random() * Math.pow(10, length))).padStart(length, '0');
+}
+const { sendEmailOTP, sendSmsOTP } = require('../services/otpSender');
+
+// POST /api/auth/forgot-password  { identifier }
+// identifier: email hoặc phone. Nếu tồn tại sẽ gửi OTP (6 số) qua kênh tương ứng.
 router.post('/forgot-password', async (req, res, next) => {
   try {
-    const { email } = req.body || {};
-    if (!email) return res.status(400).json({ message: 'Thiếu email' });
-    const user = await User.findOne({ email });
-    if (!user) return res.status(200).json({ message: 'Nếu email tồn tại, hướng dẫn đã được gửi' });
+    const { identifier } = req.body || {};
+    if (!identifier) return res.status(400).json({ message: 'Thiếu identifier (email hoặc phone)' });
 
-    const resetToken = crypto.randomBytes(20).toString('hex');
-    const hashed = crypto.createHash('sha256').update(resetToken).digest('hex');
+    let user;
+    let channel = 'email';
+    if (String(identifier).includes('@')) {
+      user = await User.findOne({ email: String(identifier).toLowerCase().trim() });
+      channel = 'email';
+    } else {
+      const phoneNorm = String(identifier).replace(/[^0-9+]/g, '');
+      user = await User.findOne({ phone: phoneNorm });
+      channel = 'sms';
+    }
+
+    if (!user) {
+      // Tránh lộ thông tin: luôn trả về thành công
+      return res.json({ message: 'Nếu tài khoản tồn tại, OTP đã được gửi' });
+    }
+
+    const otp = generateOTP(6);
+    const hashed = crypto.createHash('sha256').update(otp).digest('hex');
     user.resetPasswordToken = hashed;
-    user.resetPasswordExpires = new Date(Date.now() + 1000 * 60 * 15); // 15 minutes
+    user.resetPasswordExpires = new Date(Date.now() + 1000 * 60 * 5); // 5 phút
     await user.save();
 
-    // In production: send email with link containing resetToken
-    // For now, return token for testing
-    return res.json({ message: 'Đã tạo token đặt lại mật khẩu', resetToken });
+    if (channel === 'email') {
+      await sendEmailOTP(user.email, otp);
+    } else {
+      await sendSmsOTP(user.phone, otp);
+    }
+
+    return res.json({ message: 'Nếu tài khoản tồn tại, OTP đã được gửi' });
   } catch (err) {
     return next(err);
   }
 });
 
-// POST /api/auth/reset-password
+// POST /api/auth/reset-password { identifier, otp, password }
 router.post('/reset-password', async (req, res, next) => {
   try {
-    const { token, password } = req.body || {};
-    if (!token || !password) return res.status(400).json({ message: 'Thiếu token hoặc password' });
-    const hashed = crypto.createHash('sha256').update(token).digest('hex');
-    const user = await User.findOne({
-      resetPasswordToken: hashed,
-      resetPasswordExpires: { $gt: new Date() },
-    });
-    if (!user) return res.status(400).json({ message: 'Token không hợp lệ hoặc đã hết hạn' });
+    const { identifier, otp, password } = req.body || {};
+    if (!identifier || !otp || !password) {
+      return res.status(400).json({ message: 'Thiếu identifier, otp hoặc password' });
+    }
+
+    let user;
+    if (String(identifier).includes('@')) {
+      user = await User.findOne({ email: String(identifier).toLowerCase().trim() });
+    } else {
+      const phoneNorm = String(identifier).replace(/[^0-9+]/g, '');
+      user = await User.findOne({ phone: phoneNorm });
+    }
+    if (!user) return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
+
+    if (!user.resetPasswordToken || !user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
+      return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
+    }
+    const hashedInput = crypto.createHash('sha256').update(String(otp)).digest('hex');
+    if (hashedInput !== user.resetPasswordToken) {
+      return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
+    }
 
     const salt = await bcrypt.genSalt(10);
     user.password = await bcrypt.hash(password, salt);
