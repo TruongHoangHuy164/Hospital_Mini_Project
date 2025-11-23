@@ -256,34 +256,42 @@ export default function PharmacyInventory() {
               <tr>
                 <th style={{ width: 40 }}>#</th>
                 <th>Tên sản phẩm</th>
-                <th>Link</th>
                 <th>Đơn vị</th>
                 <th>Loại</th>
                 <th>Giá</th>
-                <th>Mô tả</th>
+                <th>Mô tả & Ảnh</th>
                 <th>Đang chọn</th>
                 <th style={{ width: 220 }} className="text-end">Thao tác</th>
               </tr>
             </thead>
             <tbody>
                 {loading && (
-                  <tr><td colSpan={9} className="text-center py-4">Đang tải...</td></tr>
+                  <tr><td colSpan={8} className="text-center py-4">Đang tải...</td></tr>
                 )}
                 {!loading && items.length === 0 && (
-                  <tr><td colSpan={9} className="text-center py-4">Chưa có dữ liệu</td></tr>
+                  <tr><td colSpan={8} className="text-center py-4">Chưa có dữ liệu</td></tr>
                 )}
                 {!loading && items.map((it, idx) => (
                   <React.Fragment key={it._id}>
                     <tr>
                       <td>{(page - 1) * limit + idx + 1}</td>
                       <td className="fw-semibold">{it.ten_san_pham}</td>
-                      <td className="text-truncate" style={{maxWidth: 240}}>
-                        <a href={it.link} target="_blank" rel="noreferrer" className="small text-muted text-decoration-none">{it.link}</a>
-                      </td>
                       <td>{it.don_vi}</td>
                       <td>{it.loaiThuoc?.ten || <span className="text-muted">-</span>}</td>
                       <td>{(it.gia || 0).toLocaleString('vi-VN')}</td>
-                      <td className="text-truncate" style={{ maxWidth: 280 }}>{it.mo_ta}</td>
+                      <td className="text-truncate" style={{ maxWidth: 280 }}>
+                        <div>{it.mo_ta}</div>
+                        {(it.chi_tiet?.anh_san_pham?.length || 0) > 0 && (
+                          <div className="mt-1 d-flex gap-1 flex-wrap">
+                            {(it.chi_tiet.anh_san_pham || []).slice(0,3).map((url,i)=>(
+                              <img key={i} src={url} alt={it.ten_san_pham + ' ' + i} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />
+                            ))}
+                            {it.chi_tiet.anh_san_pham.length > 3 && (
+                              <span className="badge bg-secondary">+{it.chi_tiet.anh_san_pham.length - 3}</span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td>{it.don_vi_dang_chon}</td>
                       <td className="text-end">
                         <button className="btn btn-sm btn-outline-info me-2" onClick={() => setExpanded(prev => ({...prev, [it._id]: !prev[it._id]}))}>
@@ -296,7 +304,7 @@ export default function PharmacyInventory() {
                     {expanded[it._id] && (
                       <tr>
                         <td></td>
-                        <td colSpan={8}>
+                        <td colSpan={7}>
                           <div className="card card-body">
                             <div className="row g-3">
                               <div className="col-md-6">
@@ -354,7 +362,7 @@ export default function PharmacyInventory() {
       
 
       {showModal && (
-        <div className="modal fade show" style={{ display: 'block' }}>
+        <div className="modal show" style={{ display: 'block' }}>
           <div className="modal-dialog modal-lg">
             <div className="modal-content">
               <div className="modal-header">
@@ -434,12 +442,11 @@ export default function PharmacyInventory() {
               </form>
             </div>
           </div>
-          <div className="modal-backdrop fade show" onClick={() => setShowModal(false)}></div>
         </div>
       )}
 
       {importResult && (
-        <div className="modal fade show" style={{ display: 'block' }}>
+        <div className="modal show" style={{ display: 'block' }}>
           <div className="modal-dialog modal-xl">
             <div className="modal-content">
               <div className="modal-header">
@@ -487,7 +494,6 @@ export default function PharmacyInventory() {
               </div>
             </div>
           </div>
-          <div className="modal-backdrop fade show" onClick={() => setImportResult(null)}></div>
         </div>
       )}
     </div>
