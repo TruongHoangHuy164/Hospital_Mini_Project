@@ -1,4 +1,4 @@
-import { privateApi } from './axios';
+import { privateApi, publicApi } from './axios';
 
 export const getPendingPrescriptions = () => privateApi.get('/pharmacy/prescriptions');
 export const dispensePrescription = (id) => privateApi.post(`/pharmacy/prescriptions/${id}/dispense`);
@@ -17,6 +17,11 @@ export const updateCategory = (id, payload) => privateApi.put(`/pharmacy/categor
 export const deleteCategory = (id) => privateApi.delete(`/pharmacy/categories/${id}`);
 export const importToCategory = (id, items) => privateApi.post(`/pharmacy/categories/${id}/import`, items);
 
+// Public (unauthenticated) medicine browsing
+export const getPublicMedicines = (params = {}) => publicApi.get('/public/medicines', { params });
+export const getPublicMedicine = (id) => publicApi.get(`/public/medicines/${id}`);
+export const getPublicMedicineCategories = () => publicApi.get('/public/medicine-categories');
+
 export default {
   getPendingPrescriptions,
   dispensePrescription,
@@ -30,4 +35,7 @@ export default {
   updateCategory,
   deleteCategory,
   importToCategory,
+  getPublicMedicines,
+  getPublicMedicine,
+  getPublicMedicineCategories,
 };

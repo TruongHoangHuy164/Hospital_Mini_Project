@@ -78,6 +78,7 @@ import CashierReports from './pages/cashier/Reports'
 import MySchedule from './pages/shared/MySchedule'
 import ReceptionSchedule from './pages/reception/Schedule'
 import ReceptionDoctors from './pages/reception/Doctors'
+import MedicinesIndex from './pages/medicines/Index'
 
 export default function App() {
   return (
@@ -99,6 +100,7 @@ export default function App() {
   <Route path="/guide" element={<GuidePage />} />
   <Route path="/specialties" element={<SpecialtiesPage />} />
   <Route path="/services" element={<ServicesPage />} />
+  <Route path="/medicines" element={<MedicinesIndex />} />
   <Route path="/booking" element={<BookingPage />} />
   <Route path="/booking/history" element={<BookingHistory />} />
   <Route path="/booking/history-test" element={<HistoryTest />} />

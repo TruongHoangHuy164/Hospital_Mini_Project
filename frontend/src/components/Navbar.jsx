@@ -8,9 +8,10 @@ export default function Navbar() {
   return (
     <nav className="navbar">
       <div className="container navbar__inner">
-        <Link to="#" className="nav__item"><i className="bi bi-info-circle"></i> Giới thiệu</Link>
+          <Link to="#" className="nav__item"><i className="bi bi-info-circle"></i> Giới thiệu</Link>
   <Link to="/specialties" className="nav__item"><i className="bi bi-hospital"></i> Chuyên khoa</Link>
   <Link to="/services" className="nav__item"><i className="bi bi-clipboard2-pulse"></i> Dịch vụ</Link>
+        <Link to="/medicines" className="nav__item"><i className="bi bi-capsule"></i> Thuốc</Link>
         <Link to="#" className="nav__item"><i className="bi bi-newspaper"></i> Tin tức</Link>
   <Link to="/guide" className="nav__item"><i className="bi bi-clipboard-check"></i> Hướng dẫn khám</Link>
         <Link to="#" className="nav__item"><i className="bi bi-envelope"></i> Liên hệ</Link>
