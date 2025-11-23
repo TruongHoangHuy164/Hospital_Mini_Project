@@ -8,8 +8,10 @@ export default function DoctorDashboard() {
   const [selectedPatient, setSelectedPatient] = useState(null);
   const [newPatient, setNewPatient] = useState({ hoTen: '', soDienThoai: '' });
   const [caseForm, setCaseForm] = useState({ chanDoan: '', huongDieuTri: 'ngoai_tru' });
-  const [casesToday, setCasesToday] = useState([]);
+  const [casesToday, setCasesToday] = useState([]); // reused for selected day
   const [loadingCases, setLoadingCases] = useState(false);
+  const todayDate = new Date().toISOString().slice(0,10);
+  const [selectedDay, setSelectedDay] = useState(todayDate); // YYYY-MM-DD
   const [selectedCase, setSelectedCase] = useState(null);
   const [rxQuery, setRxQuery] = useState('');
   const [rxResults, setRxResults] = useState([]);
@@ -68,7 +70,12 @@ export default function DoctorDashboard() {
     setLoadingCases(true);
     try{
       const url = new URL(`${API_URL}/api/doctor/cases`);
-      url.searchParams.set('date','today');
+      // If selectedDay equals todayDate use 'today' shortcut (queue unaffected)
+      if(selectedDay === todayDate){
+        url.searchParams.set('date','today');
+      } else {
+        url.searchParams.set('date', selectedDay);
+      }
       url.searchParams.set('limit','20');
       const res = await fetch(url, { headers });
       const json = await res.json();
@@ -78,7 +85,7 @@ export default function DoctorDashboard() {
     finally{ setLoadingCases(false); }
   }
 
-  useEffect(()=>{ loadCasesToday(); },[]);
+  useEffect(()=>{ loadCasesToday(); },[selectedDay]);
 
   async function loadTodayPatients(){
     try{
@@ -356,12 +363,28 @@ export default function DoctorDashboard() {
   return (
     <div className="container py-2">
       <div className="hc-card">
-        <div className="hc-card-header">Hồ sơ khám hôm nay</div>
+        <div className="hc-card-header d-flex justify-content-between align-items-center">
+          <span>Hồ sơ khám {selectedDay === todayDate ? 'hôm nay' : new Date(selectedDay+'T00:00:00').toLocaleDateString()}</span>
+          <div className="d-flex align-items-center gap-2">
+            <input type="date" className="form-control form-control-sm" style={{width:'150px'}} max={todayDate} value={selectedDay} onChange={e=>setSelectedDay(e.target.value)} />
+            <div className="btn-group btn-group-sm" role="group">
+              <button type="button" className="btn btn-outline-secondary" onClick={()=>{
+                const d = new Date(selectedDay+'T00:00:00'); d.setDate(d.getDate()-1); setSelectedDay(d.toISOString().slice(0,10));
+              }}>{'<'}
+              </button>
+              <button type="button" className="btn btn-outline-secondary" disabled={selectedDay===todayDate} onClick={()=>{
+                const d = new Date(selectedDay+'T00:00:00'); d.setDate(d.getDate()+1); const next = d.toISOString().slice(0,10); if(next<=todayDate) setSelectedDay(next);
+              }}>{'>'}
+              </button>
+              <button type="button" className="btn btn-outline-primary" disabled={selectedDay===todayDate} onClick={()=>setSelectedDay(todayDate)}>Hôm nay</button>
+            </div>
+          </div>
+        </div>
         <div className="card-body">
               {loadingCases ? (
                 <div>Đang tải...</div>
               ) : casesToday.length===0 ? (
-                <div className="text-muted">Chưa có hồ sơ nào</div>
+                <div className="text-muted">Không có hồ sơ cho ngày này</div>
               ) : (
                 <div className="list-group">
                   {casesToday.map(hs => (
