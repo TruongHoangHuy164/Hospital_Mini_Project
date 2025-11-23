@@ -19,8 +19,9 @@ router.get('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Create
+// Create (admin only)
 router.post('/', async (req, res, next) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try {
     const { ten, moTa } = req.body || {};
     if (!ten) return res.status(400).json({ message: 'Thiếu tên chuyên khoa' });
@@ -29,8 +30,9 @@ router.post('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Update
+// Update (admin only)
 router.put('/:id', async (req, res, next) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try {
     const { ten, moTa } = req.body || {};
     const updated = await ChuyenKhoa.findByIdAndUpdate(req.params.id, { ten, moTa }, { new: true });
@@ -39,8 +41,9 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Delete
+// Delete (admin only)
 router.delete('/:id', async (req, res, next) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try {
     const deleted = await ChuyenKhoa.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Không tìm thấy' });

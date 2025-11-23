@@ -50,8 +50,9 @@ app.use('/api/doctor', auth, authorize('doctor'), doctorSelfRouter);
 app.use('/api/lab', auth, authorize('lab','admin'), labRouter);
 app.use('/api/clinics', auth, authorize('admin'), clinicsRouter);
 app.use('/api/uploads', auth, authorize('admin','doctor','nurse'), uploadsRouter);
-app.use('/api/specialties', auth, authorize('admin'), specialtiesRouter);
-app.use('/api/services', auth, authorize('admin'), servicesRouter);
+// Allow all authenticated clinical roles to read specialties/services; restrict mutations inside routers
+app.use('/api/specialties', auth, specialtiesRouter);
+app.use('/api/services', auth, servicesRouter);
 // Work schedules: admin quản lý / người dùng tự xem
 app.use('/api/work-schedules', auth, authorize('admin','doctor','reception','lab','cashier','nurse'), workSchedulesRouter);
 app.use('/api/booking', bookingRouter);

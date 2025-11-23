@@ -14,8 +14,9 @@ router.get('/', async (req, res, next) => {
   }catch(err){ next(err); }
 });
 
-// Create service
+// Create service (admin only)
 router.post('/', async (req, res, next) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try{
     const { ten, moTa, active = true, chuyenKhoaId, gia } = req.body || {};
     if(!ten) return res.status(400).json({ message: 'Thiếu tên dịch vụ' });
@@ -27,8 +28,9 @@ router.post('/', async (req, res, next) => {
   }catch(err){ next(err); }
 });
 
-// Update service
+// Update service (admin only)
 router.put('/:id', async (req, res, next) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try{
     const { ten, moTa, active, chuyenKhoaId, gia } = req.body || {};
     const update = { ten, moTa, active, ...(chuyenKhoaId? { chuyenKhoaId } : {}) };
@@ -39,8 +41,9 @@ router.put('/:id', async (req, res, next) => {
   }catch(err){ next(err); }
 });
 
-// Delete service
+// Delete service (admin only)
 router.delete('/:id', async (req, res, next) => {
+  if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try{
     const deleted = await DichVu.findByIdAndDelete(req.params.id);
     if(!deleted) return res.status(404).json({ message: 'Không tìm thấy' });

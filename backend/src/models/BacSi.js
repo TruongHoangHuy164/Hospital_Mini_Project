@@ -31,8 +31,9 @@ const BacSiSchema = new mongoose.Schema(
     anhDaiDien: { type: String }, // URL ảnh
     moTa: { type: String }, // giới thiệu ngắn/bio
 
-    // Trạng thái làm việc
+    // Trạng thái làm việc & tình trạng realtime
     trangThai: { type: String, enum: ['dang_cong_tac', 'tam_nghi', 'da_nghi'], default: 'dang_cong_tac', index: true },
+    trangThaiHienTai: { type: String, enum: ['dang_kham','nghi','ban'], default: 'nghi', index: true },
   },
   { timestamps: true }
 );

@@ -8,14 +8,43 @@ const router = express.Router();
 // List pending orders
 // GET /api/lab/orders?status=cho_thuc_hien|dang_thuc_hien|da_xong
 router.get('/orders', async (req, res, next) => {
-  try{
-    const { status } = req.query;
+  try {
+    const { status, q, day } = req.query;
     const filter = {};
-    if(status) filter.trangThai = status;
-    const items = await CanLamSang.find(filter).sort({ createdAt: -1 }).limit(100)
-      .populate({ path:'hoSoKhamId', select:'benhNhanId bacSiId', populate: { path:'benhNhanId', select:'hoTen soDienThoai' } });
+    if (status) filter.trangThai = status;
+    if (q) {
+      filter.$or = [
+        { ghiChu: { $regex: q, $options: 'i' } },
+        { loaiChiDinh: { $regex: q, $options: 'i' } }
+      ];
+    }
+    // Date filtering for a specific day (YYYY-MM-DD)
+    if (day) {
+      const start = new Date(`${day}T00:00:00`);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      filter.createdAt = { $gte: start, $lt: end };
+    }
+    const items = await CanLamSang.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .populate({
+        path: 'dichVuId',
+        select: 'ten gia chuyenKhoaId',
+        populate: { path: 'chuyenKhoaId', select: 'ten' }
+      })
+      .populate({
+        path: 'hoSoKhamId',
+        select: 'benhNhanId bacSiId trangThai createdAt',
+        populate: [
+          { path: 'benhNhanId', select: 'hoTen soDienThoai ngaySinh' },
+          { path: 'bacSiId', select: 'hoTen' }
+        ]
+      });
     res.json(items);
-  }catch(err){ return next(err); }
+  } catch (err) {
+    return next(err);
+  }
 });
 
 // Claim/Start an order
