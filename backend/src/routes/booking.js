@@ -113,9 +113,11 @@ router.get('/my-results', auth, async (req, res, next) => {
     ]);
     const items = labs.map(l => ({
       _id: l._id,
+      hoSoKhamId: l.hoSoKhamId?._id || null,
       loaiChiDinh: l.loaiChiDinh,
       trangThai: l.trangThai,
       ketQua: l.ketQua,
+      ketQuaPdf: l.ketQuaPdf || null,
       ngayThucHien: l.ngayThucHien,
       createdAt: l.createdAt,
       bacSi: l.hoSoKhamId?.bacSiId ? { id: l.hoSoKhamId.bacSiId._id, hoTen: l.hoSoKhamId.bacSiId.hoTen, chuyenKhoa: l.hoSoKhamId.bacSiId.chuyenKhoa } : null,
@@ -123,6 +125,92 @@ router.get('/my-results', auth, async (req, res, next) => {
     }));
     res.json({ items, total, page, limit, totalPages: Math.ceil(total/limit) });
   }catch(err){ return next(err); }
+});
+
+// ===== Patient: list my cases (medical records) =====
+// GET /api/booking/my-cases?page=1&limit=20
+router.get('/my-cases', auth, async (req, res, next) => {
+  try {
+    const page = Math.max(parseInt(req.query.page||'1',10),1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit||'20',10),1),50);
+    const skip = (page-1)*limit;
+    const myPatients = await BenhNhan.find({ userId: req.user.id }).select('_id').lean();
+    const pids = myPatients.map(p=>p._id);
+    if(!pids.length) return res.json({ items: [], total: 0, page, limit, totalPages: 0 });
+    const [items, total] = await Promise.all([
+      HoSoKham.find({ benhNhanId: { $in: pids } })
+        .sort({ createdAt: -1 })
+        .skip(skip).limit(limit)
+        .populate('bacSiId','hoTen chuyenKhoa')
+        .select('benhNhanId bacSiId chanDoan huongDieuTri trieuChung khamLamSang trangThai createdAt updatedAt'),
+      HoSoKham.countDocuments({ benhNhanId: { $in: pids } })
+    ]);
+    const mapped = items.map(c => ({
+      _id: c._id,
+      chanDoan: c.chanDoan || '',
+      huongDieuTri: c.huongDieuTri || '',
+      trieuChung: c.trieuChung || '',
+      khamLamSang: c.khamLamSang || '',
+      trangThai: c.trangThai,
+      createdAt: c.createdAt,
+      bacSi: c.bacSiId ? { id: c.bacSiId._id, hoTen: c.bacSiId.hoTen, chuyenKhoa: c.bacSiId.chuyenKhoa } : null
+    }));
+    res.json({ items: mapped, total, page, limit, totalPages: Math.ceil(total/limit) });
+  } catch(err){ return next(err); }
+});
+
+// ===== Patient: case detail with labs & prescriptions =====
+// GET /api/booking/my-cases/:id/detail
+router.get('/my-cases/:id/detail', auth, async (req, res, next) => {
+  try {
+    const myPatients = await BenhNhan.find({ userId: req.user.id }).select('_id').lean();
+    const pids = new Set(myPatients.map(p=>String(p._id)));
+    const hs = await HoSoKham.findById(req.params.id).populate('bacSiId','hoTen chuyenKhoa');
+    if(!hs || !pids.has(String(hs.benhNhanId))) return res.status(404).json({ message: 'Không tìm thấy hồ sơ' });
+    const labs = await CanLamSang.find({ hoSoKhamId: hs._id })
+      .sort({ createdAt: -1 })
+      .populate({ path: 'dichVuId', select: 'ten gia chuyenKhoaId', populate: { path:'chuyenKhoaId', select:'ten'} });
+    const prescriptions = await require('../models/DonThuoc').find({ hoSoKhamId: hs._id })
+      .sort({ createdAt: -1 })
+      .populate({ path: 'items.thuocId', select: 'ten_san_pham gia loaiThuoc don_vi don_vi_dang_chon', populate: { path:'loaiThuoc', select:'ten'} });
+    const caseData = {
+      _id: hs._id,
+      chanDoan: hs.chanDoan || '',
+      huongDieuTri: hs.huongDieuTri || '',
+      trieuChung: hs.trieuChung || '',
+      khamLamSang: hs.khamLamSang || '',
+      trangThai: hs.trangThai,
+      createdAt: hs.createdAt,
+      bacSi: hs.bacSiId ? { id: hs.bacSiId._id, hoTen: hs.bacSiId.hoTen, chuyenKhoa: hs.bacSiId.chuyenKhoa } : null
+    };
+    const labsMapped = labs.map(l => ({
+      _id: l._id,
+      loaiChiDinh: l.loaiChiDinh,
+      dichVu: l.dichVuId ? { ten: l.dichVuId.ten, gia: l.dichVuId.gia, chuyenKhoa: l.dichVuId.chuyenKhoaId?.ten || '' } : null,
+      trangThai: l.trangThai,
+      ketQua: l.ketQua || '',
+      ketQuaPdf: l.ketQuaPdf || null,
+      ngayThucHien: l.ngayThucHien || null,
+      createdAt: l.createdAt,
+    }));
+    const rxMapped = prescriptions.map(r => ({
+      _id: r._id,
+      createdAt: r.createdAt,
+      items: (r.items||[]).map(it => ({
+        thuocId: it.thuocId?._id || it.thuocId,
+        tenThuoc: it.tenThuoc || it.thuocId?.ten_san_pham || '',
+        soLuong: it.soLuong,
+        dosageMorning: it.dosageMorning,
+        dosageNoon: it.dosageNoon,
+        dosageEvening: it.dosageEvening,
+        days: it.days,
+        usageNote: it.usageNote || '',
+        gia: it.thuocId?.gia || null,
+        loaiThuoc: it.thuocId?.loaiThuoc?.ten || ''
+      }))
+    }));
+    res.json({ case: caseData, labs: labsMapped, prescriptions: rxMapped });
+  } catch(err){ return next(err); }
 });
 
 // GET /api/booking/specialties - list specialties

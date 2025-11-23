@@ -11,6 +11,7 @@ export default function LabOrders(){
   const [viewMode, setViewMode] = useState('table'); // table | cards
   const today = useMemo(()=> new Date().toISOString().slice(0,10), []);
   const [day, setDay] = useState(today); // YYYY-MM-DD
+  const [pdfDraft, setPdfDraft] = useState({}); // id -> File
 
   const headers = useMemo(()=> ({ 'Authorization': `Bearer ${localStorage.getItem('accessToken')||''}`, 'Content-Type': 'application/json' }), []);
 
@@ -46,6 +47,14 @@ export default function LabOrders(){
     const body = { ketQua: resultDraft[id] || '' };
     const res = await fetch(`${API_URL}/api/lab/orders/${id}/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('accessToken')||''}` }, body: JSON.stringify(body) });
     if(res.ok) { setResultDraft(prev=> ({ ...prev, [id]: '' })); load(); }
+  }
+
+  async function uploadPdf(id){
+    const file = pdfDraft[id];
+    if(!file) return alert('Chọn file PDF');
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch(`${API_URL}/api/lab/orders/${id}/result`, { method:'POST', headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken')||''}` }, body: fd });
+    if(res.ok){ setPdfDraft(prev=> ({ ...prev, [id]: undefined })); load(); } else { const j = await res.json().catch(()=>null); alert(j?.message || 'Tải lên thất bại'); }
   }
 
   const totalChiPhi = items.reduce((sum,it)=> sum + (Number.isFinite(it?.dichVuId?.gia)? it.dichVuId.gia : 0),0);
@@ -95,7 +104,7 @@ export default function LabOrders(){
           <table className="table table-striped align-middle">
             <thead>
               <tr>
-                <th>Bệnh nhân</th><th>Dịch vụ</th><th>Chuyên khoa</th><th>Giá</th><th>Ghi chú</th><th>Trạng thái</th><th>Kết quả</th><th>Thời gian</th><th>Hành động</th>
+                <th>Bệnh nhân</th><th>Dịch vụ</th><th>Chuyên khoa</th><th>Giá</th><th>Ghi chú</th><th>Trạng thái</th><th>Kết quả</th><th>File PDF</th><th>Thời gian</th><th>Hành động</th>
               </tr>
             </thead>
             <tbody>
@@ -111,7 +120,18 @@ export default function LabOrders(){
                     <td style={{minWidth:160}}>{it.ghiChu || <span className="text-muted">(trống)</span>}</td>
                     <td>{it.trangThai}</td>
                     <td style={{minWidth:220}}>
-                      <input className="form-control form-control-sm" placeholder="Nhập kết quả" value={resultDraft[it._id]||it.ketQua||''} onChange={e=> setResultDraft(prev=> ({ ...prev, [it._id]: e.target.value }))} />
+                      <input className="form-control form-control-sm mb-1" placeholder="Nhập kết quả" value={resultDraft[it._id]||it.ketQua||''} onChange={e=> setResultDraft(prev=> ({ ...prev, [it._id]: e.target.value }))} />
+                      {(it.trangThai==='cho_thuc_hien' || it.trangThai==='dang_thuc_hien') && <button className="btn btn-sm btn-outline-success" onClick={()=>complete(it._id)}>Lưu kết quả</button>}
+                    </td>
+                    <td style={{minWidth:160}}>
+                      {it.ketQuaPdf ? (
+                        <a href={API_URL + it.ketQuaPdf} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary">Xem PDF</a>
+                      ) : (
+                        <div className="d-flex flex-column gap-1">
+                          <input type="file" accept="application/pdf" className="form-control form-control-sm" onChange={e=> setPdfDraft(prev=> ({ ...prev, [it._id]: e.target.files?.[0] }))} />
+                          <button className="btn btn-sm btn-primary" disabled={!pdfDraft[it._id]} onClick={()=>uploadPdf(it._id)}>Gửi PDF</button>
+                        </div>
+                      )}
                     </td>
                     <td><small>{new Date(it.createdAt).toLocaleTimeString()}</small></td>
                     <td className="text-nowrap">
@@ -150,7 +170,15 @@ export default function LabOrders(){
                       <small className="text-muted">{new Date(it.createdAt).toLocaleString()}</small>
                       <div>
                         {it.trangThai==='cho_thuc_hien' && <button className="btn btn-sm btn-outline-primary me-2" onClick={()=>start(it._id)}>Bắt đầu</button>}
-                        {(it.trangThai==='cho_thuc_hien' || it.trangThai==='dang_thuc_hien') && <button className="btn btn-sm btn-success" onClick={()=>complete(it._id)}>Hoàn tất</button>}
+                        {(it.trangThai==='cho_thuc_hien' || it.trangThai==='dang_thuc_hien') && <button className="btn btn-sm btn-success me-2" onClick={()=>complete(it._id)}>Hoàn tất</button>}
+                        {it.ketQuaPdf ? (
+                          <a href={API_URL + it.ketQuaPdf} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-outline-primary">PDF</a>
+                        ) : (
+                          <div className="d-inline-block">
+                            <input type="file" accept="application/pdf" className="form-control form-control-sm mb-1" onChange={e=> setPdfDraft(prev=> ({ ...prev, [it._id]: e.target.files?.[0] }))} />
+                            <button className="btn btn-sm btn-primary w-100" disabled={!pdfDraft[it._id]} onClick={()=>uploadPdf(it._id)}>Gửi PDF</button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>

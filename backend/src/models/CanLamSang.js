@@ -9,6 +9,8 @@ const CanLamSangSchema = new mongoose.Schema(
     dichVuId: { type: mongoose.Schema.Types.ObjectId, ref: 'DichVu', required: true, index: true },
     trangThai: { type: String, enum: ['cho_thuc_hien', 'dang_thuc_hien', 'da_xong'], default: 'cho_thuc_hien', index: true },
     ketQua: { type: String },
+    // Đường dẫn file PDF kết quả (nếu có). Lưu tương đối dưới /uploads/lab-results
+    ketQuaPdf: { type: String },
     ngayThucHien: { type: Date },
     nhanVienId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },
     ghiChu: { type: String, default: '' },

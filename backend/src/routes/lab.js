@@ -2,6 +2,9 @@ const express = require('express');
 const CanLamSang = require('../models/CanLamSang');
 const HoSoKham = require('../models/HoSoKham');
 const BenhNhan = require('../models/BenhNhan');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 
 const router = express.Router();
 
@@ -70,3 +73,46 @@ router.post('/orders/:id/complete', async (req, res, next) => {
 });
 
 module.exports = router;
+
+// ===== Upload PDF result (new endpoint) =====
+// POST /api/lab/orders/:id/result  (multipart/form-data, field: file)
+// Accept only application/pdf, store under /uploads/lab-results
+const resultsDir = path.join(__dirname, '..', 'uploads', 'lab-results');
+if(!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: function(req,file,cb){ cb(null, resultsDir); },
+  filename: function(req,file,cb){
+    const unique = Date.now() + '-' + Math.random().toString(36).slice(2,8);
+    cb(null, unique + '.pdf');
+  }
+});
+const upload = multer({
+  storage,
+  fileFilter: (req,file,cb)=>{
+    if(file.mimetype !== 'application/pdf') return cb(new Error('Chỉ chấp nhận PDF'));
+    cb(null,true);
+  },
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
+});
+
+router.post('/orders/:id/result', upload.single('file'), async (req,res,next)=>{
+  try{
+    if(!req.file) return res.status(400).json({ message: 'Thiếu file PDF' });
+    const doc = await CanLamSang.findById(req.params.id)
+      .populate({ path: 'dichVuId', select: 'ten gia chuyenKhoaId', populate: { path:'chuyenKhoaId', select:'ten' } })
+      .populate({ path: 'hoSoKhamId', select: 'benhNhanId bacSiId trangThai createdAt', populate: [
+        { path: 'benhNhanId', select: 'hoTen soDienThoai ngaySinh' },
+        { path: 'bacSiId', select: 'hoTen' }
+      ]});
+    if(!doc) return res.status(404).json({ message: 'Không tìm thấy chỉ định' });
+    doc.ketQuaPdf = `/uploads/lab-results/${path.basename(req.file.path)}`;
+    // If not yet completed, mark completed
+    if(doc.trangThai !== 'da_xong') {
+      doc.trangThai = 'da_xong';
+      if(!doc.ngayThucHien) doc.ngayThucHien = new Date();
+    }
+    await doc.save();
+    res.status(201).json(doc);
+  }catch(err){ return next(err); }
+});
