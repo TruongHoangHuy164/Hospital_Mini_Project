@@ -3,14 +3,12 @@ const mongoose = require('mongoose');
 // Require all models so they are registered
 require('../models/BenhNhan');
 require('../models/SoThuTu');
-require('../models/BHYT');
 require('../models/PhongKham');
 require('../models/BacSi');
 require('../models/HoSoKham');
 require('../models/CanLamSang');
 require('../models/ThanhToan');
 require('../models/DonThuoc');
-require('../models/Thuoc');
 require('../models/CapThuoc');
 
 async function syncAllIndexes() {

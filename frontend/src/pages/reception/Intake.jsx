@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { fetchProvinces, fetchDistricts, fetchWards } from '../../api/location';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
@@ -24,8 +25,17 @@ export default function Intake(){
     quanHuyen: '',
     phuongXa: '',
     diaChi: '',
-    quanHe: '' 
+    quanHe: '',
+    tinhThanhCode: '',
+    quanHuyenCode: '',
+    phuongXaCode: ''
   });
+  // Location lists & loading/error
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [wards, setWards] = useState([]);
+  const [locLoading, setLocLoading] = useState(false);
+  const [locError, setLocError] = useState('');
   const token = localStorage.getItem('accessToken') || '';
 
   async function search(){
@@ -113,11 +123,77 @@ export default function Intake(){
         quanHuyen: '',
         phuongXa: '',
         diaChi: '',
-        quanHe: '' 
+        quanHe: '',
+        tinhThanhCode: '',
+        quanHuyenCode: '',
+        phuongXaCode: ''
       });
       await checkByContact();
     }catch(e){ setLookupError(e?.message||'Lỗi tạo hồ sơ người thân'); }
   }
+
+  // Load provinces once
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLocLoading(true); setLocError('');
+        const data = await fetchProvinces();
+        if(mounted) setProvinces(data);
+      } catch (e){ if(mounted) setLocError(e.message); }
+      finally { if(mounted) setLocLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // When province changes fetch districts
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const code = newProfile.tinhThanhCode;
+      if(!code){ setDistricts([]); setWards([]); return; }
+      try {
+        setLocLoading(true); setLocError('');
+        const data = await fetchDistricts(code);
+        if(mounted){
+          setDistricts(data);
+          const provinceObj = provinces.find(p => String(p.code) === String(code));
+          setNewProfile(p => ({ ...p, tinhThanh: provinceObj ? provinceObj.name : p.tinhThanh, quanHuyenCode: '', phuongXaCode: '', quanHuyen: '', phuongXa: '' }));
+          setWards([]);
+        }
+      } catch(e){ if(mounted) setLocError(e.message); }
+      finally { if(mounted) setLocLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, [newProfile.tinhThanhCode, provinces]);
+
+  // When district changes fetch wards
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      const code = newProfile.quanHuyenCode;
+      if(!code){ setWards([]); return; }
+      try {
+        setLocLoading(true); setLocError('');
+        const data = await fetchWards(code);
+        if(mounted){
+          setWards(data);
+          const distObj = districts.find(d => String(d.code) === String(code));
+          setNewProfile(p => ({ ...p, quanHuyen: distObj ? distObj.name : p.quanHuyen, phuongXaCode: '', phuongXa: '' }));
+        }
+      } catch(e){ if(mounted) setLocError(e.message); }
+      finally { if(mounted) setLocLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, [newProfile.quanHuyenCode, districts]);
+
+  // When ward code changes, set ward name
+  useEffect(() => {
+    const code = newProfile.phuongXaCode;
+    const wardObj = wards.find(w => String(w.code) === String(code));
+    if(wardObj){ setNewProfile(p => ({ ...p, phuongXa: wardObj.name })); }
+    else if(!code){ setNewProfile(p => ({ ...p, phuongXa: '' })); }
+  }, [newProfile.phuongXaCode, wards]);
 
   return (
     <div>
@@ -287,32 +363,54 @@ export default function Intake(){
                     </div>
                     
                     <div className="col-md-4">
-                      <label className="form-label">Tỉnh / Thành phố</label>
-                      <input 
-                        className="form-control" 
-                        value={newProfile.tinhThanh} 
-                        onChange={e=>setNewProfile(p=>({ ...p, tinhThanh: e.target.value }))}
-                        placeholder="Vd: TP. Hồ Chí Minh"
-                      />
+                      <label className="form-label">Tỉnh / Thành phố <span className="text-danger">*</span></label>
+                      <select
+                        className="form-select"
+                        value={newProfile.tinhThanhCode}
+                        onChange={e=>setNewProfile(p=>({ ...p, tinhThanhCode: e.target.value }))}
+                        required
+                      >
+                        <option value="">-- Chọn --</option>
+                        {provinces.map(p => (
+                          <option key={p.code} value={p.code}>{p.name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="col-md-4">
-                      <label className="form-label">Quận / Huyện</label>
-                      <input 
-                        className="form-control" 
-                        value={newProfile.quanHuyen} 
-                        onChange={e=>setNewProfile(p=>({ ...p, quanHuyen: e.target.value }))}
-                        placeholder="Vd: Quận 1"
-                      />
+                      <label className="form-label">Quận / Huyện <span className="text-danger">*</span></label>
+                      <select
+                        className="form-select"
+                        value={newProfile.quanHuyenCode}
+                        onChange={e=>setNewProfile(p=>({ ...p, quanHuyenCode: e.target.value }))}
+                        disabled={!newProfile.tinhThanhCode || locLoading}
+                        required
+                      >
+                        <option value="">-- Chọn --</option>
+                        {districts.map(d => (
+                          <option key={d.code} value={d.code}>{d.name}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="col-md-4">
-                      <label className="form-label">Phường / Xã</label>
-                      <input 
-                        className="form-control" 
-                        value={newProfile.phuongXa} 
-                        onChange={e=>setNewProfile(p=>({ ...p, phuongXa: e.target.value }))}
-                        placeholder="Vd: Phường Bến Nghé"
-                      />
+                      <label className="form-label">Phường / Xã <span className="text-danger">*</span></label>
+                      <select
+                        className="form-select"
+                        value={newProfile.phuongXaCode}
+                        onChange={e=>setNewProfile(p=>({ ...p, phuongXaCode: e.target.value }))}
+                        disabled={!newProfile.quanHuyenCode || locLoading}
+                        required
+                      >
+                        <option value="">-- Chọn --</option>
+                        {wards.map(w => (
+                          <option key={w.code} value={w.code}>{w.name}</option>
+                        ))}
+                      </select>
                     </div>
+                    {locError && (
+                      <div className="col-12">
+                        <div className="alert alert-warning py-2 mb-0">{locError}</div>
+                      </div>
+                    )}
                     
                     <div className="col-12">
                       <label className="form-label">Địa chỉ chi tiết</label>

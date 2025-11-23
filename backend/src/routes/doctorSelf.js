@@ -3,7 +3,6 @@ const BacSi = require('../models/BacSi');
 const BenhNhan = require('../models/BenhNhan');
 const HoSoKham = require('../models/HoSoKham');
 const DonThuoc = require('../models/DonThuoc');
-const CapThuoc = require('../models/CapThuoc');
 // Dùng ThuocKho thay cho Thuoc để kê đơn trực tiếp từ kho (có đơn vị, giá)
 const ThuocKho = require('../models/ThuocKho');
 const DoctorSchedule = require('../models/DoctorSchedule');

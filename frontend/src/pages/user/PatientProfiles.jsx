@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
+import { fetchProvinces, fetchDistricts, fetchWards } from '../../api/location';
 import { toast } from 'react-toastify';
 import {
   getPatientProfiles,
@@ -29,9 +30,21 @@ const ProfileForm = ({ profile, onSave, onCancel }) => {
     handleSubmit,
     formState: { errors },
     reset,
+    watch,
+    setValue,
   } = useForm({
     defaultValues: defaultFormValues,
   });
+
+  // Location state
+  const [provinces, setProvinces] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [wards, setWards] = useState([]);
+  const [locLoading, setLocLoading] = useState(false);
+  const [locError, setLocError] = useState(null);
+
+  const selectedProvinceCode = watch('tinhThanhCode');
+  const selectedDistrictCode = watch('quanHuyenCode');
 
   useEffect(() => {
     if (profile) {
@@ -41,12 +54,76 @@ const ProfileForm = ({ profile, onSave, onCancel }) => {
         ngaySinh: profile.ngaySinh
           ? new Date(profile.ngaySinh).toISOString().split('T')[0]
           : '',
+        tinhThanhCode: '',
+        quanHuyenCode: '',
+        phuongXaCode: '',
       };
       reset(normalizedProfile);
     } else {
-      reset(defaultFormValues);
+      reset({ ...defaultFormValues, tinhThanhCode: '', quanHuyenCode: '', phuongXaCode: '' });
     }
   }, [profile, reset]);
+
+  // Load provinces once
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLocLoading(true); setLocError(null);
+        const data = await fetchProvinces();
+        if (mounted) setProvinces(data);
+      } catch (e) {
+        if (mounted) setLocError(e.message);
+      } finally { if (mounted) setLocLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  // When province changes, fetch districts
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!selectedProvinceCode) { setDistricts([]); setWards([]); setValue('tinhThanh',''); return; }
+      try {
+        setLocLoading(true); setLocError(null); setDistricts([]); setWards([]);
+        const data = await fetchDistricts(selectedProvinceCode);
+        if (mounted) {
+          setDistricts(data);
+          const provinceObj = provinces.find(p => String(p.code) === String(selectedProvinceCode));
+          if (provinceObj) setValue('tinhThanh', provinceObj.name);
+        }
+      } catch (e) { if (mounted) setLocError(e.message); }
+      finally { if (mounted) setLocLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, [selectedProvinceCode, provinces, setValue]);
+
+  // When district changes, fetch wards
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!selectedDistrictCode) { setWards([]); setValue('quanHuyen',''); return; }
+      try {
+        setLocLoading(true); setLocError(null); setWards([]);
+        const data = await fetchWards(selectedDistrictCode);
+        if (mounted) {
+          setWards(data);
+          const distObj = districts.find(d => String(d.code) === String(selectedDistrictCode));
+          if (distObj) setValue('quanHuyen', distObj.name);
+        }
+      } catch (e) { if (mounted) setLocError(e.message); }
+      finally { if (mounted) setLocLoading(false); }
+    })();
+    return () => { mounted = false; };
+  }, [selectedDistrictCode, districts, setValue]);
+
+  // When ward code changes, set ward name
+  const selectedWardCode = watch('phuongXaCode');
+  useEffect(() => {
+    const wardObj = wards.find(w => String(w.code) === String(selectedWardCode));
+    if (wardObj) setValue('phuongXa', wardObj.name);
+    else if (!selectedWardCode) setValue('phuongXa','');
+  }, [selectedWardCode, wards, setValue]);
 
   const onSubmit = (data) => {
     onSave(data);
@@ -135,19 +212,50 @@ const ProfileForm = ({ profile, onSave, onCancel }) => {
         </div>
 
         <div className="profile-form__field">
-          <label className="profile-form__label">Tỉnh / Thành phố</label>
-          <input className="profile-form__input" {...register('tinhThanh')} />
+          <label className="profile-form__label">Tỉnh / Thành phố *</label>
+          <select
+            className="profile-form__select"
+            {...register('tinhThanhCode', { required: 'Chọn tỉnh / thành phố' })}
+          >
+            <option value="">-- Chọn --</option>
+            {provinces.map(p => (
+              <option key={p.code} value={p.code}>{p.name}</option>
+            ))}
+          </select>
+          {errors.tinhThanhCode && <p className="profile-form__error">{errors.tinhThanhCode.message}</p>}
         </div>
 
         <div className="profile-form__field">
-          <label className="profile-form__label">Quận / Huyện</label>
-          <input className="profile-form__input" {...register('quanHuyen')} />
+          <label className="profile-form__label">Quận / Huyện *</label>
+          <select
+            className="profile-form__select"
+            disabled={!selectedProvinceCode || locLoading}
+            {...register('quanHuyenCode', { required: 'Chọn quận / huyện' })}
+          >
+            <option value="">-- Chọn --</option>
+            {districts.map(d => (
+              <option key={d.code} value={d.code}>{d.name}</option>
+            ))}
+          </select>
+          {errors.quanHuyenCode && <p className="profile-form__error">{errors.quanHuyenCode.message}</p>}
         </div>
 
         <div className="profile-form__field">
-          <label className="profile-form__label">Phường / Xã</label>
-          <input className="profile-form__input" {...register('phuongXa')} />
+          <label className="profile-form__label">Phường / Xã *</label>
+          <select
+            className="profile-form__select"
+            disabled={!selectedDistrictCode || locLoading}
+            {...register('phuongXaCode', { required: 'Chọn phường / xã' })}
+          >
+            <option value="">-- Chọn --</option>
+            {wards.map(w => (
+              <option key={w.code} value={w.code}>{w.name}</option>
+            ))}
+          </select>
+          {errors.phuongXaCode && <p className="profile-form__error">{errors.phuongXaCode.message}</p>}
         </div>
+
+        {locError && <div className="profile-form__field profile-form__error">{locError}</div>}
 
         <div className="profile-form__field profile-form__field--wide">
           <label className="profile-form__label">Địa chỉ chi tiết</label>

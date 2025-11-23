@@ -5,7 +5,6 @@ const mongoose = require('mongoose');
 // Require models to register them with Mongoose
 require('../models/BenhNhan');
 require('../models/SoThuTu');
-require('../models/BHYT');
 require('../models/PhongKham');
 require('../models/ChuyenKhoa');
 require('../models/BacSi');
@@ -13,7 +12,6 @@ require('../models/HoSoKham');
 require('../models/CanLamSang');
 require('../models/ThanhToan');
 require('../models/DonThuoc');
-require('../models/Thuoc');
 require('../models/CapThuoc');
 
 async function main() {
