@@ -5,6 +5,15 @@ const asyncHandler = require('express-async-handler');
 
 const router = express.Router();
 
+// Chuẩn hoá số điện thoại (cơ bản: bỏ khoảng trắng, giữ nguyên ký tự số và + nếu đầu)
+function normalizePhone(raw){
+  if(!raw) return '';
+  const t = String(raw).trim();
+  // Remove spaces and common formatting characters
+  const cleaned = t.replace(/[\s\-\.]/g,'');
+  return cleaned;
+}
+
 // @desc    Lấy tất cả hồ sơ của người dùng đang đăng nhập
 // @route   GET /api/patient-profiles
 // @access  Private
@@ -47,12 +56,18 @@ router.post(
     console.log('Backend: Creating profile for user:', req.user.id);
     console.log('Backend: Profile data:', { hoTen, ngaySinh, gioiTinh, quanHe });
     
+    const phoneNorm = normalizePhone(soDienThoai);
+    if(!phoneNorm){ return res.status(400).json({ message: 'Số điện thoại là bắt buộc' }); }
+    // Kiểm tra trùng trước khi tạo để trả lỗi rõ ràng (tránh lỗi E11000 khó đọc)
+    const existed = await PatientProfile.findOne({ soDienThoai: phoneNorm, id_nguoiTao: { $ne: req.user.id } }) || await PatientProfile.findOne({ soDienThoai: phoneNorm, id_nguoiTao: req.user.id });
+    if(existed){ return res.status(409).json({ message: 'Số điện thoại đã tồn tại ở một hồ sơ khác' }); }
+
     const profile = new PatientProfile({
       id_nguoiTao: req.user.id,
       hoTen,
       ngaySinh,
       gioiTinh,
-      soDienThoai,
+      soDienThoai: phoneNorm,
       email,
       cccd,
       hoChieu,
@@ -65,10 +80,16 @@ router.post(
       diaChi,
       quanHe,
     });
-
-    const createdProfile = await profile.save();
-    console.log('Backend: Profile created successfully:', createdProfile._id);
-    res.status(201).json(createdProfile);
+    try {
+      const createdProfile = await profile.save();
+      console.log('Backend: Profile created successfully:', createdProfile._id);
+      res.status(201).json(createdProfile);
+    } catch(e){
+      if(e?.code === 11000){
+        return res.status(409).json({ message: 'Số điện thoại đã tồn tại' });
+      }
+      throw e;
+    }
   })
 );
 
@@ -121,7 +142,15 @@ router.put(
       profile.hoTen = hoTen || profile.hoTen;
       profile.ngaySinh = ngaySinh || profile.ngaySinh;
       profile.gioiTinh = gioiTinh || profile.gioiTinh;
-      profile.soDienThoai = soDienThoai || profile.soDienThoai;
+      if(soDienThoai){
+        const phoneNorm = normalizePhone(soDienThoai);
+        if(!phoneNorm){ return res.status(400).json({ message: 'Số điện thoại không hợp lệ' }); }
+        if(phoneNorm !== profile.soDienThoai){
+          const existed = await PatientProfile.findOne({ soDienThoai: phoneNorm, _id: { $ne: profile._id } });
+          if(existed){ return res.status(409).json({ message: 'Số điện thoại đã tồn tại ở hồ sơ khác' }); }
+          profile.soDienThoai = phoneNorm;
+        }
+      }
       profile.email = email || profile.email;
       profile.cccd = cccd || profile.cccd;
       profile.hoChieu = hoChieu || profile.hoChieu;

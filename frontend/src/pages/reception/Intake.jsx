@@ -323,13 +323,27 @@ export default function Intake(){
                     
                     <div className="col-md-6">
                       <label className="form-label">Mối quan hệ <span className="text-danger">*</span></label>
-                      <input 
-                        className="form-control" 
-                        value={newProfile.quanHe} 
-                        onChange={e=>setNewProfile(p=>({ ...p, quanHe: e.target.value }))} 
-                        placeholder="Vd: Bố, Mẹ, Con trai..."
+                      <select
+                        className="form-select"
+                        value={['Bản Thân','Cha','Mẹ','Con','Vợ','Ông','Bà','Khác'].includes(newProfile.quanHe) ? newProfile.quanHe : (newProfile.quanHe ? newProfile.quanHe : '')}
+                        onChange={e=>{
+                          const v = e.target.value; 
+                          setNewProfile(p=>({ ...p, quanHe: v }));
+                        }}
                         required
-                      />
+                      >
+                        <option value="">-- Chọn --</option>
+                        {['Cha','Mẹ','Con','Vợ','Ông','Bà','Khác'].map(o => <option key={o} value={o}>{o}</option>)}
+                        {newProfile.quanHe && !['Cha','Mẹ','Con','Vợ','Ông','Bà','Khác'].includes(newProfile.quanHe) && <option value={newProfile.quanHe}>{newProfile.quanHe}</option>}
+                      </select>
+                      {newProfile.quanHe === 'Khác' && (
+                        <input
+                          className="form-control mt-2"
+                          placeholder="Nhập quan hệ khác (Ví dụ: Cháu, Anh, Chị...)"
+                          value={['Cha','Mẹ','Con','Vợ','Ông','Bà','Khác'].includes(newProfile.quanHe) ? '' : newProfile.quanHe}
+                          onChange={e=>setNewProfile(p=>({ ...p, quanHe: e.target.value || 'Khác' }))}
+                        />
+                      )}
                     </div>
                     <div className="col-md-6">
                       <label className="form-label">Số điện thoại <span className="text-danger">*</span></label>

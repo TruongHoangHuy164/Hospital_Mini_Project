@@ -6,7 +6,7 @@ const StaffSchema = new mongoose.Schema(
     hoTen: { type: String, required: true, trim: true },
     gioiTinh: { type: String, enum: ['nam', 'nu', 'khac'], default: 'khac' },
     ngaySinh: { type: Date },
-    soDienThoai: { type: String, index: true },
+    soDienThoai: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
     diaChi: { type: String },
   vaiTro: { type: String, enum: ['reception','lab','cashier','nurse','pharmacy'], required: true, index: true },
@@ -17,4 +17,6 @@ const StaffSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Unique index cho số điện thoại nhân viên
+StaffSchema.index({ soDienThoai: 1 }, { unique: true, sparse: true });
 module.exports = mongoose.model('Staff', StaffSchema);

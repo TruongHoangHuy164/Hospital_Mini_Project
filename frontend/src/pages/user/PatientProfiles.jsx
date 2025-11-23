@@ -176,15 +176,30 @@ const ProfileForm = ({ profile, onSave, onCancel }) => {
 
         <div className="profile-form__field">
           <label className="profile-form__label">Mối quan hệ *</label>
-          <input
-            className="profile-form__input"
-            placeholder="Vd: Bố, Mẹ, Con trai..."
+          <select
+            className="profile-form__select"
             {...register('quanHe', { required: 'Mối quan hệ là bắt buộc' })}
-          />
-          {errors.quanHe && (
-            <p className="profile-form__error">{errors.quanHe.message}</p>
-          )}
+          >
+            <option value="">-- Chọn --</option>
+            {['Bản Thân','Cha','Mẹ','Con','Vợ','Ông','Bà','Khác'].map(o => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+            {watch('quanHe') && !['Cha','Mẹ','Con','Vợ','Ông','Bà','Khác'].includes(watch('quanHe')) && (
+              <option value={watch('quanHe')}>{watch('quanHe')}</option>
+            )}
+          </select>
+          {errors.quanHe && <p className="profile-form__error">{errors.quanHe.message}</p>}
         </div>
+        {watch('quanHe') === 'Khác' && (
+          <div className="profile-form__field">
+            <label className="profile-form__label">Quan hệ khác (nhập cụ thể)</label>
+            <input
+              className="profile-form__input"
+              placeholder="Ví dụ: Cháu, Anh, Chị..."
+              onChange={e => setValue('quanHe', e.target.value || 'Khác')}
+            />
+          </div>
+        )}
 
         <div className="profile-form__field">
           <label className="profile-form__label">Số điện thoại *</label>

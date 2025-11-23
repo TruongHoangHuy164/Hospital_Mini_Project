@@ -90,6 +90,8 @@ patientProfileSchema.pre('save', function (next) {
   next();
 });
 
+// Unique index cho số điện thoại trong hồ sơ người thân
+patientProfileSchema.index({ soDienThoai: 1 }, { unique: true, sparse: true });
 const PatientProfile = mongoose.model('PatientProfile', patientProfileSchema);
 
 module.exports = PatientProfile;

@@ -11,7 +11,7 @@ const BacSiSchema = new mongoose.Schema(
     ngaySinh: { type: Date },
 
     // Liên hệ
-    soDienThoai: { type: String, index: true },
+    soDienThoai: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true, unique: true, sparse: true },
     diaChi: { type: String },
 
@@ -38,4 +38,6 @@ const BacSiSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Unique index cho số điện thoại bác sĩ (bỏ trống thì không bắt buộc)
+BacSiSchema.index({ soDienThoai: 1 }, { unique: true, sparse: true });
 module.exports = mongoose.model('BacSi', BacSiSchema);

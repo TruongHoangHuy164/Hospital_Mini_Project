@@ -37,12 +37,15 @@ const Profile = () => {
       setProfile(data);
       
       // Set form data
+      const registrationPhone = user?.phone || '';
+      const registrationEmail = user?.email || '';
       setFormData({
-        hoTen: data.hoTen || '',
+        hoTen: data.hoTen || user?.name || '',
         ngaySinh: data.ngaySinh ? new Date(data.ngaySinh).toISOString().split('T')[0] : '',
         gioiTinh: data.gioiTinh || 'khac',
         diaChi: data.diaChi || '',
-        soDienThoai: data.soDienThoai || '',
+        // Prefill phone: existing profile phone OR registered phone OR empty
+        soDienThoai: (data.soDienThoai || registrationPhone || ''),
         maBHYT: data.maBHYT || ''
       });
     } catch (error) {
@@ -68,6 +71,15 @@ const Profile = () => {
       }));
     }
   };
+
+  // If profile already loaded but phone still empty and user has phone, backfill once
+  useEffect(() => {
+    if (!loading && user && !formData.soDienThoai) {
+      if (user.phone) {
+        setFormData(prev => ({ ...prev, soDienThoai: user.phone }));
+      }
+    }
+  }, [loading, user, formData.soDienThoai]);
 
   const validateForm = () => {
     const newErrors = {};
