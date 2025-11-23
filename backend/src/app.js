@@ -27,8 +27,9 @@ const patientsRouter = require('./routes/patients');
 const app = express();
 
 app.use(cors({ origin: process.env.ORIGIN || '*' }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase body size limits to support large JSON imports for pharmacy inventory
+app.use(express.json({ limit: process.env.BODY_LIMIT || '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: process.env.BODY_LIMIT || '20mb' }));
 app.use(morgan('dev'));
 
 app.get('/', (req, res) => {
