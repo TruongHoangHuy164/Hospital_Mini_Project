@@ -8,6 +8,8 @@ const CanLamSangSchema = new mongoose.Schema(
     // New: link to DichVu (service) for ordered test/service
     dichVuId: { type: mongoose.Schema.Types.ObjectId, ref: 'DichVu', required: true, index: true },
     trangThai: { type: String, enum: ['cho_thuc_hien', 'dang_thuc_hien', 'da_xong'], default: 'cho_thuc_hien', index: true },
+    // Whether this specific lab order has been paid (reception collects payment before lab performs)
+    daThanhToan: { type: Boolean, default: false, index: true },
     ketQua: { type: String },
     // Đường dẫn file PDF kết quả (nếu có). Lưu tương đối dưới /uploads/lab-results
     ketQuaPdf: { type: String },

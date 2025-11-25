@@ -10,7 +10,7 @@ const mongoose = require('mongoose');
 const WorkScheduleSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    role: { type: String, enum: ['doctor','reception','lab','cashier','nurse'], required: true, index: true },
+    role: { type: String, enum: ['doctor','reception','lab','nurse'], required: true, index: true },
   // Store date-only as fixed string 'YYYY-MM-DD' to avoid timezone issues
   day: { type: String, required: true, match: /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/, index: true },
     shift: { type: String, enum: ['sang','chieu','toi'], required: true },

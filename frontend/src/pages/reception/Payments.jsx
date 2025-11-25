@@ -1,0 +1,227 @@
+import React, { useEffect, useState, useCallback } from 'react';
+import { createMomoPayment, createCashPayment, getPayment } from '../../api/payments';
+import { privateApi } from '../../api/axios';
+
+export default function ReceptionPayments(){
+  const [services, setServices] = useState([]);
+  const [items, setItems] = useState([]); // {serviceId, qty}
+  const [loading, setLoading] = useState(false);
+  const [paymentResult, setPaymentResult] = useState(null);
+  const [paymentId, setPaymentId] = useState(null);
+  const [status, setStatus] = useState(null);
+  const [hoSoId, setHoSoId] = useState('');
+  const [labOrders, setLabOrders] = useState([]);
+  const [unpaidCases, setUnpaidCases] = useState([]);
+  const [caseSearch, setCaseSearch] = useState('');
+
+  const loadLabOrders = async (hosoid) => {
+    if(!hosoid) return alert('Nhập hoSoKhamId');
+    try{
+      const res = await privateApi.get('/payments/canlamsang', { params: { hoSoKhamId: hosoid } });
+      setLabOrders((res.data || []).map(it => ({ ...it, _selected: false })));
+    }catch(e){
+      console.error('load orders', e);
+      const msg = e.response?.data?.message || e.response?.data?.error || e.message || 'Không tải được chỉ định';
+      alert(msg);
+    }
+  };
+
+  const loadUnpaidCases = async (q = '') => {
+    try{
+      const res = await privateApi.get('/payments/unpaid-cases', { params: { q } });
+      setUnpaidCases(res.data || []);
+    }catch(e){ console.error('load unpaid cases', e); }
+  };
+
+  useEffect(()=>{ loadUnpaidCases(); }, []);
+
+  useEffect(()=>{
+    async function load(){
+      try{
+          const res = await privateApi.get('/payments/services');
+        setServices(res.data || []);
+      }catch(err){
+        console.error('Load services failed', err);
+      }
+    }
+    load();
+  },[]);
+
+  const addLine = () => setItems(i => [...i, { serviceId: '', qty: 1 }]);
+  const updateLine = (idx, patch) => setItems(i => i.map((it,j)=> j===idx? {...it,...patch} : it));
+  const removeLine = (idx) => setItems(i => i.filter((_,j)=> j!==idx));
+
+  const total = items.reduce((s,it)=>{
+    const svc = services.find(sv=> String(sv._id) === String(it.serviceId));
+    return s + (svc? (svc.gia||0) * (it.qty||0) : 0);
+  },0);
+
+  const onPay = async () => {
+    if (!items.length && !labOrders.filter(o=>o._selected).length) return alert('Chọn ít nhất 1 dịch vụ hoặc chỉ định');
+    const selectedLabIds = labOrders.filter(o=>o._selected).map(o=>o._id);
+    const hoSoKhamId = hoSoId || prompt('Nhập hoSoKhamId (hoặc để trống nếu chưa có)');
+    setLoading(true);
+    try{
+      const resp = await createMomoPayment({ hoSoKhamId, amount: total, orderInfo: `Thanh toan ${items.length} dich vu`, orderRefs: selectedLabIds, targetType: selectedLabIds.length? 'canlamsang' : 'hosokham' });
+      setPaymentResult(resp);
+      setPaymentId(resp.paymentId);
+      setStatus('PENDING');
+      // Nếu nhận được payUrl từ MoMo, mở nhanh để cashier/receptionist thực hiện thanh toán
+      const payUrl = resp?.momo?.payUrl;
+      if (payUrl) {
+        try{ window.open(payUrl, '_blank'); }catch(e){ console.warn('Unable to open payUrl', e); }
+      }
+    }catch(err){
+      console.error(err);
+      alert('Tạo yêu cầu thanh toán thất bại');
+    }finally{ setLoading(false); }
+  };
+
+  const onCashPay = async () => {
+    const selectedLabIds = labOrders.filter(o=>o._selected).map(o=>o._id);
+    if (!items.length && !selectedLabIds.length) return alert('Chọn ít nhất 1 dịch vụ hoặc chỉ định');
+    const hoSoKhamId = hoSoId || prompt('Nhập hoSoKhamId (hoặc để trống nếu chưa có)');
+    if(!confirm('Xác nhận đã thu tiền mặt?')) return;
+    try{
+      const resp = await createCashPayment({ hoSoKhamId, amount: total, orderRefs: selectedLabIds, targetType: selectedLabIds.length? 'canlamsang' : 'hosokham' });
+      alert('Đã ghi nhận thu tiền mặt');
+      // refresh lab orders and clear selections
+      setLabOrders(labOrders.filter(o=> !selectedLabIds.includes(o._id)));
+      setItems([]);
+    }catch(e){ console.error(e); alert('Ghi nhận thất bại'); }
+  };
+
+    // Thanh toán MoMo chỉ cho các chỉ định đã chọn (chỉ cập nhật CanLamSang)
+    const onPaySelectedLabOrders = async () => {
+      const selectedLabIds = labOrders.filter(o=>o._selected).map(o=>o._id);
+      if (!selectedLabIds.length) return alert('Chọn ít nhất 1 chỉ định để thanh toán');
+      const hoSoKhamId = hoSoId || prompt('Nhập hoSoKhamId (hoặc để trống nếu chưa có)');
+      // Tính tổng tiền từ các chỉ định đã chọn
+      const amount = labOrders.filter(o=>o._selected).reduce((s,o)=> s + (o.dichVuId?.gia || 0), 0);
+      setLoading(true);
+      try{
+        const resp = await createMomoPayment({ hoSoKhamId, amount, orderInfo: `Thanh toan ${selectedLabIds.length} chi dinh`, orderRefs: selectedLabIds, targetType: 'canlamsang' });
+        setPaymentResult(resp);
+        setPaymentId(resp.paymentId);
+        setStatus('PENDING');
+        const payUrl = resp?.momo?.payUrl;
+        if (payUrl) {
+          try{ window.open(payUrl, '_blank'); }catch(e){ console.warn('Unable to open payUrl', e); }
+        }
+      }catch(err){
+        console.error(err);
+        alert('Tạo yêu cầu thanh toán thất bại');
+      }finally{ setLoading(false); }
+    };
+
+  // Poll payment status
+  useEffect(()=>{
+    if(!paymentId) return;
+    let stopped = false;
+    const iv = setInterval(async ()=>{
+      try{
+        const resp = await getPayment(paymentId);
+        if(stopped) return;
+        setStatus(resp.status || resp?.data?.status || null);
+        if(resp.status === 'PAID' || resp.status === 'FAILED' || resp.status === 'paid'){
+          clearInterval(iv); stopped = true;
+        }
+      }catch(err){
+        console.error('poll error', err);
+      }
+    }, 3000);
+    return ()=>{ clearInterval(iv); stopped = true; };
+  },[paymentId]);
+
+  return (
+    <div>
+      <h3>Thu tiền dịch vụ (MoMo)</h3>
+      <div className="row mb-3">
+        <div className="col-md-5">
+          <label>Hồ sơ có chỉ định chưa thanh toán</label>
+          <div className="input-group mb-2">
+            <input className="form-control" placeholder="Tìm theo tên hoặc sđt" value={caseSearch} onChange={e=>setCaseSearch(e.target.value)} />
+            <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases(caseSearch)}>Tìm</button>
+            <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases('')}>Tải lại</button>
+          </div>
+          <div style={{maxHeight:300, overflow:'auto'}}>
+            {unpaidCases.map(c => (
+              <div key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action ${hoSoId===String(c.hoSoKhamId)?'active':''}`} style={{cursor:'pointer'}} onClick={()=>{ setHoSoId(String(c.hoSoKhamId)); loadLabOrders(String(c.hoSoKhamId)); }}>
+                <div><strong>{c.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{c.benhNhan?.soDienThoai || ''}</small></div>
+                <div className="small text-muted">Chỉ định chưa thanh toán: {c.count}</div>
+              </div>
+            ))}
+            {unpaidCases.length===0 && <div className="text-muted small">Không có hồ sơ</div>}
+          </div>
+        </div>
+        <div className="col-md-7">
+          <label>HoSoKhamId:</label>
+          <div className="input-group">
+            <input className="form-control" value={hoSoId} onChange={e=>setHoSoId(e.target.value)} placeholder="Nhập hoSoKhamId" />
+            <button className="btn btn-outline-secondary" onClick={()=>loadLabOrders(hoSoId)}>Tải chỉ định</button>
+          </div>
+        </div>
+      </div>
+
+      <p>Danh sách chỉ định (chưa thanh toán):</p>
+      <div className="mb-3">
+        {labOrders.map(l=> (
+          <div key={l._id} className="form-check">
+            <input className="form-check-input" type="checkbox" id={`lab-${l._id}`} checked={!!l._selected} onChange={e=>{
+              setLabOrders(ls => ls.map(it => it._id === l._id ? {...it, _selected: e.target.checked } : it));
+            }} />
+            <label className="form-check-label" htmlFor={`lab-${l._id}`}>{l.dichVuId?.ten} — Giá: {l.dichVuId?.gia || 0}</label>
+          </div>
+        ))}
+        <div className="mt-2">
+          <button className="btn btn-success btn-sm me-2" onClick={onPaySelectedLabOrders} disabled={loading}>Thanh toán MoMo (chỉ định đã chọn)</button>
+        </div>
+      </div>
+
+      <p>Danh sách dịch vụ (chọn số lượng):</p>
+      <table className="table">
+        <thead><tr><th>Service</th><th>Giá</th><th>Số lượng</th><th></th></tr></thead>
+        <tbody>
+          {items.map((it,idx)=> (
+            <tr key={idx}>
+              <td>
+                <select value={it.serviceId} onChange={e=>updateLine(idx,{serviceId:e.target.value})} className="form-select">
+                  <option value="">-- Chọn dịch vụ --</option>
+                  {services.map(s=> <option key={s._id} value={s._id}>{s.ten} ({s.chuyenKhoaId?.ten || ''})</option>)}
+                </select>
+              </td>
+              <td>{services.find(s=> String(s._id)===String(it.serviceId))?.gia ?? 0}</td>
+              <td><input type="number" className="form-control" value={it.qty} min={1} onChange={e=>updateLine(idx,{qty: Number(e.target.value)})} /></td>
+              <td><button className="btn btn-sm btn-danger" onClick={()=>removeLine(idx)}>Xóa</button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mb-3">
+        <button className="btn btn-sm btn-outline-primary me-2" onClick={addLine}>Thêm dịch vụ</button>
+        <strong>Tổng: {total.toLocaleString()} đ</strong>
+      </div>
+      <div className="mb-3">
+        <button className="btn btn-primary" onClick={onPay} disabled={loading || total<=0}>Thanh toán bằng MoMo</button>
+      </div>
+
+      {paymentResult && (
+        <div className="card mt-3">
+          <div className="card-body">
+            <h5>Yêu cầu thanh toán</h5>
+            <pre style={{maxHeight:200, overflow:'auto'}}>{JSON.stringify(paymentResult.momo || paymentResult, null, 2)}</pre>
+            { (paymentResult.momo?.payUrl || paymentResult.momo?.payUrl) && (
+              <div>
+                <a className="btn btn-success" href={paymentResult.momo.payUrl} target="_blank" rel="noreferrer">Mở MoMo để thanh toán</a>
+              </div>
+            )}
+            {paymentResult.momo?.qrCode && (
+              <div className="mt-2"><img src={paymentResult.momo.qrCode} alt="QR" style={{maxWidth:300}} /></div>
+            )}
+            <div className="mt-2">Trạng thái: <strong>{status || 'PENDING'}</strong></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

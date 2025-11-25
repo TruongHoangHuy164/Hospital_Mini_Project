@@ -39,6 +39,7 @@ import DoctorProfile from './pages/doctor/Profile'
 import RequireReception from './pages/reception/RequireReception'
 import ReceptionLayout from './pages/reception/Layout'
 import ReceptionDashboard from './pages/reception/Dashboard'
+const ReceptionPayments = React.lazy(() => import('./pages/reception/Payments'));
 import RequireLab from './pages/lab/RequireLab'
 import LabLayout from './pages/lab/Layout'
 import LabDashboard from './pages/lab/Dashboard'
@@ -146,6 +147,7 @@ export default function App() {
   <Route path="queue" element={<QueuePage />} />
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />
+          <Route path="payments" element={<ReceptionPayments />} />
         <Route path="my-schedule" element={<MySchedule />} />
         <Route path="schedule" element={<ReceptionSchedule />} />
         <Route path="doctors" element={<ReceptionDoctors />} />

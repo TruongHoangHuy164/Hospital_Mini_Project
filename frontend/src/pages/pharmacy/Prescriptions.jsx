@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getPendingPrescriptions, dispensePrescription } from '../../api/pharmacy';
+import { getPendingPrescriptions, dispensePrescription, payPrescription } from '../../api/pharmacy';
 
 export default function PharmacyPrescriptions() {
   const [list, setList] = useState([]);
@@ -29,6 +29,17 @@ export default function PharmacyPrescriptions() {
     }
   };
 
+  const onPay = async (id) => {
+    if (!confirm('Xác nhận thu tiền đơn thuốc?')) return;
+    try {
+      await payPrescription(id);
+      await load();
+      alert('Đã thu tiền');
+    } catch (err) {
+      alert('Lỗi khi thu tiền: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   return (
     <div>
       <h4>Đơn chờ xử lý</h4>
@@ -45,6 +56,12 @@ export default function PharmacyPrescriptions() {
                 <div><strong>Trạng thái:</strong> {d.status}</div>
               </div>
               <div>
+                {d.status === 'issued' && (
+                  <>
+                    {d.qrDataUrl && <div className="mb-2"><img src={d.qrDataUrl} alt="QR" style={{width:96}} /></div>}
+                    <button className="btn btn-sm btn-success me-2" onClick={()=>onPay(d._id)}>Thu tiền</button>
+                  </>
+                )}
                 <button className="btn btn-sm btn-primary" onClick={()=>onDispense(d._id)}>Phát thuốc</button>
               </div>
             </div>

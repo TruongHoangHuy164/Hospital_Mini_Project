@@ -28,6 +28,9 @@ router.get('/orders', async (req, res, next) => {
       end.setDate(end.getDate() + 1);
       filter.createdAt = { $gte: start, $lt: end };
     }
+    // By default only show lab orders that have been paid by reception (daThanhToan = true).
+    // If caller sets includeUnpaid=1, return unpaid as well (for admin/debug).
+    if(!req.query.includeUnpaid) filter.daThanhToan = true;
     const items = await CanLamSang.find(filter)
       .sort({ createdAt: -1 })
       .limit(200)

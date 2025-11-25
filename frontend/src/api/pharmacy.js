@@ -2,6 +2,7 @@ import { privateApi, publicApi } from './axios';
 
 export const getPendingPrescriptions = () => privateApi.get('/pharmacy/prescriptions');
 export const dispensePrescription = (id) => privateApi.post(`/pharmacy/prescriptions/${id}/dispense`);
+export const payPrescription = (id) => privateApi.post(`/pharmacy/prescriptions/${id}/pay`);
 
 // Inventory APIs
 export const getInventory = (params = {}) => privateApi.get('/pharmacy/inventory', { params });

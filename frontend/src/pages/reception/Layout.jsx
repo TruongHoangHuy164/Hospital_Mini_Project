@@ -19,6 +19,7 @@ export default function ReceptionLayout() {
               <li className="nav-item"><NavLink to="/reception/queue" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-123 me-2"></i> Cấp số thứ tự & in STT </NavLink></li>
               <li className="nav-item"><NavLink to="/reception/appointments" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-calendar-check me-2"></i> Đặt Lịch</NavLink></li>
               <li className="nav-item"><NavLink to="/reception/doctors" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-people me-2"></i> Quản Lý Lịch Hẹn</NavLink></li>
+              <li className="nav-item"><NavLink to="/reception/payments" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-cash-stack me-2"></i> Thu tiền dịch vụ</NavLink></li>
               <li className="nav-item"><NavLink to="/reception/lookup" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-search me-2"></i> Tra cứu bệnh nhân</NavLink></li>
               {/* <li className="nav-item"><NavLink to="/reception/print" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-printer me-2"></i> In số/hoá đơn</NavLink></li> */}
               <li className="nav-item"><NavLink to="/reception/my-schedule" className={({isActive})=>`nav-link ${isActive?'active':''}`}><i className="bi bi-calendar-week me-2"></i> Lịch của tôi</NavLink></li>

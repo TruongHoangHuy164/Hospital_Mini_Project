@@ -17,6 +17,7 @@ const bookingRouter = require('./routes/booking');
 const labRouter = require('./routes/lab');
 const staffRouter = require('./routes/staff');
 const patientProfilesRouter = require('./routes/patientProfiles');
+const paymentsRouter = require('./routes/payments');
 const servicesRouter = require('./routes/services');
 const publicRouter = require('./routes/public');
 const aiRouter = require('./routes/ai');
@@ -57,6 +58,10 @@ app.use('/api/services', auth, servicesRouter);
 app.use('/api/work-schedules', auth, authorize('admin','doctor','reception','lab','cashier','nurse'), workSchedulesRouter);
 app.use('/api/booking', bookingRouter);
 app.use('/api/patient-profiles', patientProfilesRouter);
+// Payments (MoMo notify endpoint must be public; other endpoints protected inside router)
+app.use('/api/payments', paymentsRouter);
+// Backwards-compatible mount: some frontend code expects /api/reception/payments
+app.use('/api/reception/payments', paymentsRouter);
 // Patient search for receptionists/admins
 app.use('/api/patients', auth, patientsRouter);
 app.use('/api/public', publicRouter);

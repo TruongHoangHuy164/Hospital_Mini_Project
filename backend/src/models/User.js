@@ -7,7 +7,7 @@ const UserSchema = new mongoose.Schema(
     email: { type: String, unique: true, lowercase: true, trim: true, sparse: true },
     phone: { type: String, unique: true, trim: true, sparse: true },
     password: { type: String, required: true, minlength: 6 },
-  role: { type: String, enum: ['user', 'doctor', 'admin', 'reception', 'lab', 'cashier', 'nurse', 'pharmacy'], default: 'user', index: true },
+  role: { type: String, enum: ['user', 'doctor', 'admin', 'reception', 'lab', 'nurse', 'pharmacy'], default: 'user', index: true },
   permissions: { type: [String], default: [] },
   lastActive: { type: Date, index: true },
     // Account status

@@ -58,6 +58,28 @@ router.post('/prescriptions/:id/dispense', async (req, res) => {
   }
 });
 
+// Pay a prescription: mark as paid/pending_pharmacy so pharmacy can process
+router.post('/prescriptions/:id/pay', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const don = await DonThuoc.findById(id);
+    if (!don) return res.status(404).json({ message: 'Không tìm thấy đơn' });
+
+    if (don.status === 'pending_pharmacy' || don.status === 'dispensing' || don.status === 'dispensed') {
+      return res.status(400).json({ message: 'Đơn đã được thanh toán hoặc đang xử lý' });
+    }
+
+    // Mark as pending_pharmacy to indicate payment received
+    don.status = 'pending_pharmacy';
+    await don.save();
+
+    // Optionally record a ThanhToan entry in future; for now just update status
+    res.json({ message: 'Đã đánh dấu là đã thu tiền', don });
+  } catch (err) {
+    res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+});
+
 module.exports = router;
 // Inventory management below
 
