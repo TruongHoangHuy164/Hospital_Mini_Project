@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { createMomoPayment, createCashPayment, getPayment } from '../../api/payments';
 import { privateApi } from '../../api/axios';
 
@@ -12,13 +12,17 @@ export default function ReceptionPayments(){
   const [hoSoId, setHoSoId] = useState('');
   const [labOrders, setLabOrders] = useState([]);
   const [unpaidCases, setUnpaidCases] = useState([]);
+  const [firstCase, setFirstCase] = useState(null);
   const [caseSearch, setCaseSearch] = useState('');
+  const ordersRef = useRef(null);
 
   const loadLabOrders = async (hosoid) => {
     if(!hosoid) return alert('Nhập hoSoKhamId');
     try{
       const res = await privateApi.get('/payments/canlamsang', { params: { hoSoKhamId: hosoid } });
-      setLabOrders((res.data || []).map(it => ({ ...it, _selected: false })));
+      const items = (res.data || []).map(it => ({ ...it, _selected: false }));
+      setLabOrders(items);
+      return items;
     }catch(e){
       console.error('load orders', e);
       const msg = e.response?.data?.message || e.response?.data?.error || e.message || 'Không tải được chỉ định';
@@ -29,7 +33,9 @@ export default function ReceptionPayments(){
   const loadUnpaidCases = async (q = '') => {
     try{
       const res = await privateApi.get('/payments/unpaid-cases', { params: { q } });
-      setUnpaidCases(res.data || []);
+      const list = res.data || [];
+      setUnpaidCases(list);
+      setFirstCase(list.length ? list[0] : null);
     }catch(e){ console.error('load unpaid cases', e); }
   };
 
@@ -136,17 +142,30 @@ export default function ReceptionPayments(){
   return (
     <div>
       <h3>Thu tiền dịch vụ (MoMo)</h3>
-      <div className="row mb-3">
-        <div className="col-md-5">
-          <label>Hồ sơ có chỉ định chưa thanh toán</label>
-          <div className="input-group mb-2">
+      {!hoSoId ? (
+        <div className="mb-3">
+          <h5>Hồ sơ có chỉ định chưa thanh toán</h5>
+          <div className="input-group mb-2" style={{maxWidth:500}}>
             <input className="form-control" placeholder="Tìm theo tên hoặc sđt" value={caseSearch} onChange={e=>setCaseSearch(e.target.value)} />
             <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases(caseSearch)}>Tìm</button>
             <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases('')}>Tải lại</button>
           </div>
-          <div style={{maxHeight:300, overflow:'auto'}}>
+          {firstCase && (
+            <div className="card mb-2">
+              <div className="card-body d-flex justify-content-between align-items-center">
+                <div>
+                  <div><strong>{firstCase.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{firstCase.benhNhan?.soDienThoai || ''}</small></div>
+                  <div className="small text-muted">Chỉ định chưa thanh toán: {firstCase.count} — Mã hồ sơ: {String(firstCase.hoSoKhamId)}</div>
+                </div>
+                <div>
+                  <button className="btn btn-primary" onClick={async ()=>{ setHoSoId(String(firstCase.hoSoKhamId)); await loadLabOrders(String(firstCase.hoSoKhamId)); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem chỉ định</button>
+                </div>
+              </div>
+            </div>
+          )}
+          <div style={{maxHeight:500, overflow:'auto'}}>
             {unpaidCases.map(c => (
-              <div key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action ${hoSoId===String(c.hoSoKhamId)?'active':''}`} style={{cursor:'pointer'}} onClick={()=>{ setHoSoId(String(c.hoSoKhamId)); loadLabOrders(String(c.hoSoKhamId)); }}>
+              <div key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action ${hoSoId===String(c.hoSoKhamId)?'active':''}`} style={{cursor:'pointer'}} onClick={async ()=>{ setHoSoId(String(c.hoSoKhamId)); await loadLabOrders(String(c.hoSoKhamId)); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
                 <div><strong>{c.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{c.benhNhan?.soDienThoai || ''}</small></div>
                 <div className="small text-muted">Chỉ định chưa thanh toán: {c.count}</div>
               </div>
@@ -154,17 +173,48 @@ export default function ReceptionPayments(){
             {unpaidCases.length===0 && <div className="text-muted small">Không có hồ sơ</div>}
           </div>
         </div>
-        <div className="col-md-7">
-          <label>HoSoKhamId:</label>
-          <div className="input-group">
-            <input className="form-control" value={hoSoId} onChange={e=>setHoSoId(e.target.value)} placeholder="Nhập hoSoKhamId" />
-            <button className="btn btn-outline-secondary" onClick={()=>loadLabOrders(hoSoId)}>Tải chỉ định</button>
+      ) : (
+        <div className="row mb-3">
+          <div className="col-md-4">
+            <div className="mb-2">
+              <button className="btn btn-link" onClick={()=>{ setHoSoId(''); setLabOrders([]); setCaseSearch(''); }}>← Quay lại danh sách hồ sơ</button>
+            </div>
+            <div style={{maxHeight:500, overflow:'auto'}}>
+              {unpaidCases.map(c => (
+                <div key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action ${hoSoId===String(c.hoSoKhamId)?'active':''}`} style={{cursor:'pointer'}} onClick={async ()=>{ setHoSoId(String(c.hoSoKhamId)); await loadLabOrders(String(c.hoSoKhamId)); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
+                  <div><strong>{c.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{c.benhNhan?.soDienThoai || ''}</small></div>
+                  <div className="small text-muted">Chỉ định chưa thanh toán: {c.count}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="col-md-8">
+            <label>HoSoKhamId: <strong>{hoSoId}</strong></label>
+            {(() => {
+              const selectedCase = unpaidCases.find(cc => String(cc.hoSoKhamId) === hoSoId);
+              if(selectedCase){
+                return (
+                  <div className="card mb-2">
+                    <div className="card-body p-2">
+                      <div><strong>{selectedCase.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{selectedCase.benhNhan?.soDienThoai || ''}</small></div>
+                      <div className="small text-muted">Ngày khám: {selectedCase.hoSoKhamNgay ? (new Date(selectedCase.hoSoKhamNgay)).toLocaleString() : '—'}</div>
+                      <div className="small text-muted">Mã hồ sơ: {String(selectedCase.hoSoKhamId)}</div>
+                    </div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            <div className="input-group mb-2">
+              <input className="form-control" value={hoSoId} onChange={e=>setHoSoId(e.target.value)} placeholder="Nhập hoSoKhamId" />
+              <button className="btn btn-outline-secondary" onClick={async ()=>{ await loadLabOrders(hoSoId); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Tải chỉ định</button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <p>Danh sách chỉ định (chưa thanh toán):</p>
-      <div className="mb-3">
+      <p ref={ordersRef}>Danh sách chỉ định (chưa thanh toán):</p>
+      <div className="mb-3" ref={ordersRef}>
         {labOrders.map(l=> (
           <div key={l._id} className="form-check">
             <input className="form-check-input" type="checkbox" id={`lab-${l._id}`} checked={!!l._selected} onChange={e=>{

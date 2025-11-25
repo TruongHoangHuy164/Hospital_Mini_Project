@@ -4,6 +4,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 export default function LabOrders(){
   const [status, setStatus] = useState('cho_thuc_hien');
   const [items,setItems]=useState([]);
+  const [cases, setCases] = useState([]); // grouped by hoSoKham
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resultDraft, setResultDraft] = useState({});
@@ -12,6 +13,7 @@ export default function LabOrders(){
   const today = useMemo(()=> new Date().toISOString().slice(0,10), []);
   const [day, setDay] = useState(today); // YYYY-MM-DD
   const [pdfDraft, setPdfDraft] = useState({}); // id -> File
+  const [selectedCaseId, setSelectedCaseId] = useState(null);
 
   const headers = useMemo(()=> ({ 'Authorization': `Bearer ${localStorage.getItem('accessToken')||''}`, 'Content-Type': 'application/json' }), []);
 
@@ -25,6 +27,17 @@ export default function LabOrders(){
       const json = await res.json();
       if(!res.ok) throw json;
       setItems(json);
+      // group by hoSoKhamId
+      const map = new Map();
+      for(const it of (json || [])){
+        const hs = it.hoSoKhamId || {};
+        const hid = hs._id || (typeof hs === 'string' ? hs : null);
+        if(!hid) continue;
+        const entry = map.get(hid) || { hoSoKhamId: hid, benhNhan: hs.benhNhanId || hs.benhNhan || {}, ngayKham: hs.ngayKham || null, count: 0 };
+        entry.count = (entry.count || 0) + 1;
+        map.set(hid, entry);
+      }
+      setCases(Array.from(map.values()));
     }catch(e){ setError(e?.message||'Lỗi tải'); }
     finally{ setLoading(false); }
   }
@@ -68,6 +81,35 @@ export default function LabOrders(){
           <button className={`btn btn-outline-secondary ${viewMode==='cards'?'active':''}`} onClick={()=>setViewMode('cards')}>Thẻ</button>
         </div>
       </div>
+          {/* Case-first view: list cases, click to view orders for that case */}
+          {!selectedCaseId && (
+            <div className="mb-3">
+              <h5>Hồ sơ có chỉ định</h5>
+              <div className="row g-2">
+                {cases.map(c => (
+                  <div key={c.hoSoKhamId} className="col-md-4">
+                    <div className="card h-100">
+                      <div className="card-body d-flex flex-column">
+                        <div className="mb-1"><strong>{c.benhNhan?.hoTen || '-'}</strong></div>
+                        <div className="small text-muted mb-2">{c.benhNhan?.soDienThoai || ''} — Ngày: {c.ngayKham? new Date(c.ngayKham).toLocaleString() : '-'}</div>
+                        <div className="mb-2">Chỉ định: <strong>{c.count}</strong></div>
+                        <div className="mt-auto text-end">
+                          <button className="btn btn-sm btn-primary" onClick={async ()=>{ setSelectedCaseId(String(c.hoSoKhamId)); await load(); }}>Xem chỉ định</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {cases.length===0 && <div className="col-12 text-muted">Không có hồ sơ</div>}
+              </div>
+            </div>
+          )}
+          {selectedCaseId && (
+            <div className="mb-3">
+              <button className="btn btn-link p-0 mb-2" onClick={()=> setSelectedCaseId(null)}>← Quay lại danh sách hồ sơ</button>
+              <div className="alert alert-secondary">Hiển thị chỉ định cho hồ sơ: <strong>{selectedCaseId}</strong></div>
+            </div>
+          )}
       {error && <div className="alert alert-danger">{error}</div>}
       <div className="row g-2 mb-3">
         <div className="col-md-3">
@@ -108,7 +150,11 @@ export default function LabOrders(){
               </tr>
             </thead>
             <tbody>
-              {items.map(it => {
+              {items.filter(it => {
+                if(!selectedCaseId) return true;
+                const hid = it.hoSoKhamId?._id || (it.hoSoKhamId || '');
+                return String(hid) === String(selectedCaseId);
+              }).map(it => {
                 const bn = it.hoSoKhamId?.benhNhanId;
                 const dv = it.dichVuId;
                 return (
