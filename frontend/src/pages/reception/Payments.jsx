@@ -90,11 +90,13 @@ export default function ReceptionPayments(){
     if(!confirm('Xác nhận đã thu tiền mặt?')) return;
     try{
       const resp = await createCashPayment({ hoSoKhamId, amount: total, orderRefs: selectedLabIds, targetType: selectedLabIds.length? 'canlamsang' : 'hosokham' });
-      alert('Đã ghi nhận thu tiền mặt');
-      // refresh lab orders and clear selections
-      setLabOrders(labOrders.filter(o=> !selectedLabIds.includes(o._id)));
+      alert('✅ Đã ghi nhận thu tiền mặt');
+      // Xóa các chỉ định đã thanh toán khỏi danh sách
+      setLabOrders(ls => ls.filter(o=> !selectedLabIds.includes(o._id)));
       setItems([]);
-    }catch(e){ console.error(e); alert('Ghi nhận thất bại'); }
+      // Làm mới danh sách hồ sơ chưa thanh toán
+      loadUnpaidCases();
+    }catch(e){ console.error(e); alert('❌ Ghi nhận thất bại'); }
   };
 
     // Thanh toán MoMo chỉ cho các chỉ định đã chọn (chỉ cập nhật CanLamSang)
@@ -110,6 +112,10 @@ export default function ReceptionPayments(){
         setPaymentResult(resp);
         setPaymentId(resp.paymentId);
         setStatus('PENDING');
+        
+        // Xóa ngay các chỉ định đã chọn khỏi danh sách (giả định thanh toán sẽ thành công)
+        setLabOrders(ls => ls.filter(o => !selectedLabIds.includes(o._id)));
+        
         const payUrl = resp?.momo?.payUrl;
         if (payUrl) {
           try{ window.open(payUrl, '_blank'); }catch(e){ console.warn('Unable to open payUrl', e); }
@@ -129,15 +135,26 @@ export default function ReceptionPayments(){
         const resp = await getPayment(paymentId);
         if(stopped) return;
         setStatus(resp.status || resp?.data?.status || null);
-        if(resp.status === 'PAID' || resp.status === 'FAILED' || resp.status === 'paid'){
+        if(resp.status === 'PAID' || resp.status === 'paid'){
           clearInterval(iv); stopped = true;
+          // Thanh toán thành công - làm mới danh sách chỉ định
+          if(hoSoId){
+            setTimeout(() => {
+              loadLabOrders(hoSoId);
+              loadUnpaidCases();
+              alert('✅ Thanh toán thành công! Danh sách chỉ định đã cập nhật.');
+            }, 500);
+          }
+        } else if(resp.status === 'FAILED' || resp.status === 'failed'){
+          clearInterval(iv); stopped = true;
+          alert('❌ Thanh toán thất bại');
         }
       }catch(err){
         console.error('poll error', err);
       }
     }, 3000);
     return ()=>{ clearInterval(iv); stopped = true; };
-  },[paymentId]);
+  },[paymentId, hoSoId]);
 
   return (
     <div>

@@ -44,7 +44,6 @@ import RequireLab from './pages/lab/RequireLab'
 import LabLayout from './pages/lab/Layout'
 import LabDashboard from './pages/lab/Dashboard'
 import LabOrders from './pages/lab/Orders'
-import LabResults from './pages/lab/Results'
 import RequirePharmacy from './pages/pharmacy/RequirePharmacy'
 import PharmacyLayout from './pages/pharmacy/Layout'
 import PharmacyDashboard from './pages/pharmacy/Dashboard'
@@ -156,7 +155,6 @@ export default function App() {
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>
         <Route path="dashboard" element={<LabDashboard />} />
         <Route path="orders" element={<LabOrders />} />
-        <Route path="results" element={<LabResults />} />
         <Route path="my-schedule" element={<MySchedule />} />
       </Route>
 
