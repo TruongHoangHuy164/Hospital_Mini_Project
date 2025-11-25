@@ -41,7 +41,13 @@ export default function PharmacyInventory() {
   const [order, setOrder] = useState('desc');
   const [categories, setCategories] = useState([]);
   const [selectedCategoryId, setSelectedCategoryId] = useState('');
+  // Category creation within modals
   const [newCategoryName, setNewCategoryName] = useState('');
+  // Import modal state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importCategoryId, setImportCategoryId] = useState('');
+  const [creatingCategory, setCreatingCategory] = useState(false);
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -148,45 +154,41 @@ export default function PharmacyInventory() {
     }
   };
 
-  const onImportFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const performImport = async () => {
+    if(!importFile){ toast.warn('Chưa chọn file JSON'); return; }
     try {
-      const text = await file.text();
+      const text = await importFile.text();
       const data = JSON.parse(text);
-      if (!Array.isArray(data)) {
-        toast.warn('File phải là mảng JSON');
-        return;
-      }
+      if (!Array.isArray(data)) { toast.warn('File phải là mảng JSON'); return; }
       setImporting(true);
-      const res = await importInventory(data, selectedCategoryId ? { categoryId: selectedCategoryId } : {});
+      const targetCategory = importCategoryId || selectedCategoryId || '';
+      const res = await importInventory(data, targetCategory ? { categoryId: targetCategory } : {});
       setImportResult(res.data);
       toast.success('Import thành công');
+      setShowImportModal(false);
       setPage(1);
       load();
       loadCategories();
-    } catch (err) {
+      setImportFile(null);
+    } catch(err){
       toast.error('Import thất bại: ' + (err?.response?.data?.message || err.message));
-    } finally {
-      setImporting(false);
-      // reset the input so same file can be re-selected
-      e.target.value = '';
-    }
+    } finally { setImporting(false); }
   };
 
-  const createCategoryInline = async (e) => {
-    e.preventDefault();
+  const handleCreateCategory = async () => {
     const name = newCategoryName.trim();
-    if (!name) return;
+    if(!name) { toast.warn('Tên loại thuốc không được trống'); return; }
+    setCreatingCategory(true);
     try {
       const { data } = await createCategory({ ten: name });
       setNewCategoryName('');
       setSelectedCategoryId(data._id);
+      setImportCategoryId(data._id); // if creating inside import modal
       await loadCategories();
       toast.success('Đã tạo loại');
-    } catch (e) {
+    } catch(e){
       toast.error(e?.response?.data?.message || 'Tạo loại thất bại');
-    }
+    } finally { setCreatingCategory(false); }
   };
 
   // Removed inline category delete/import (side panel no longer used)
@@ -196,10 +198,9 @@ export default function PharmacyInventory() {
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h4 className="m-0"><i className="bi bi-capsule"></i> Quản lý kho thuốc</h4>
         <div className="d-flex gap-2">
-          <label className="btn btn-outline-secondary mb-0" disabled={importing}>
-            {importing ? (<><span className="spinner-border spinner-border-sm me-2"></span>Đang import...</>) : (<><i className="bi bi-upload"></i> Import JSON</>)}
-            <input type="file" accept="application/json" onChange={onImportFile} hidden />
-          </label>
+          <button className="btn btn-outline-secondary" disabled={importing} onClick={()=> setShowImportModal(true)}>
+            {importing ? (<><span className="spinner-border spinner-border-sm me-2" />Đang import...</>) : (<><i className="bi bi-upload" /> Import JSON</>)}
+          </button>
           <button className="btn btn-primary" onClick={openCreate}><i className="bi bi-plus-lg"></i> Thêm thuốc</button>
         </div>
       </div>
@@ -243,11 +244,8 @@ export default function PharmacyInventory() {
           <div className="col-md-1 d-grid">
             <button className="btn btn-outline-primary" disabled={loading}><i className="bi bi-search"></i></button>
           </div>
-          <div className="col-md-3 d-flex gap-2">
-            <form className="input-group" onSubmit={createCategoryInline}>
-              <input className="form-control" placeholder="Tạo loại mới" value={newCategoryName} onChange={(e)=>setNewCategoryName(e.target.value)} />
-              <button className="btn btn-outline-primary" type="submit"><i className="bi bi-plus-lg"></i></button>
-            </form>
+          <div className="col-md-3 d-flex align-items-center">
+            <span className="text-muted small">Chọn loại rồi thêm thuốc hoặc import</span>
           </div>
         </form>
         <div className="table-responsive shadow-sm border rounded">
@@ -390,10 +388,19 @@ export default function PharmacyInventory() {
                     </div>
                     <div className="col-md-4">
                       <label className="form-label">Loại thuốc</label>
-                      <select className="form-select" value={form.loaiThuoc || selectedCategoryId || ''} onChange={(e)=> setForm({ ...form, loaiThuoc: e.target.value })}>
-                        <option value="">-- Chưa chọn --</option>
-                        {categories.map(c => <option key={c._id} value={c._id}>{c.ten}</option>)}
-                      </select>
+                      <div className="input-group">
+                        <select className="form-select" value={form.loaiThuoc || selectedCategoryId || ''} onChange={(e)=> setForm({ ...form, loaiThuoc: e.target.value })}>
+                          <option value="">-- Chưa chọn --</option>
+                          {categories.map(c => <option key={c._id} value={c._id}>{c.ten}</option>)}
+                        </select>
+                        <button type="button" className="btn btn-outline-secondary" title="Làm mới" onClick={loadCategories}><i className="bi bi-arrow-clockwise" /></button>
+                      </div>
+                      <div className="mt-2 input-group">
+                        <input className="form-control" placeholder="Tên loại mới" value={newCategoryName} onChange={(e)=>setNewCategoryName(e.target.value)} />
+                        <button type="button" className="btn btn-outline-primary" disabled={creatingCategory} onClick={handleCreateCategory}>
+                          {creatingCategory ? <span className="spinner-border spinner-border-sm" /> : <i className="bi bi-plus-lg" />}
+                        </button>
+                      </div>
                     </div>
                     <div className="col-md-4">
                       <label className="form-label">Đơn vị đang chọn</label>
@@ -491,6 +498,51 @@ export default function PharmacyInventory() {
               </div>
               <div className="modal-footer">
                 <button className="btn btn-primary" onClick={() => setImportResult(null)}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {showImportModal && (
+        <div className="modal show" style={{ display: 'block' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Import JSON vào loại thuốc</h5>
+                <button type="button" className="btn-close" onClick={()=> { setShowImportModal(false); setImportFile(null); }}></button>
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">Chọn loại thuốc</label>
+                  <select className="form-select" value={importCategoryId || selectedCategoryId} onChange={(e)=> setImportCategoryId(e.target.value)}>
+                    <option value="">-- Không gán loại --</option>
+                    {categories.map(c => <option key={c._id} value={c._id}>{c.ten}</option>)}
+                  </select>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Tạo loại mới (tùy chọn)</label>
+                  <div className="input-group">
+                    <input className="form-control" placeholder="Tên loại mới" value={newCategoryName} onChange={(e)=>setNewCategoryName(e.target.value)} />
+                    <button type="button" className="btn btn-outline-primary" disabled={creatingCategory} onClick={handleCreateCategory}>
+                      {creatingCategory ? <span className="spinner-border spinner-border-sm" /> : <i className="bi bi-plus-lg" />}
+                    </button>
+                  </div>
+                  <div className="form-text">Sau khi tạo sẽ tự chọn loại vừa tạo.</div>
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">File JSON</label>
+                  <input type="file" accept="application/json" className="form-control" onChange={(e)=> setImportFile(e.target.files?.[0] || null)} />
+                  {importFile && <div className="small text-muted mt-1">Đã chọn: {importFile.name}</div>}
+                </div>
+                <div className="alert alert-secondary small">
+                  File phải là mảng JSON các đối tượng chứa tối thiểu <code>link</code> hoặc <code>ten_san_pham</code>.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-light" type="button" onClick={()=> { setShowImportModal(false); setImportFile(null); }}>Đóng</button>
+                <button className="btn btn-primary" type="button" disabled={importing} onClick={performImport}>
+                  {importing ? 'Đang import...' : 'Thực hiện import'}
+                </button>
               </div>
             </div>
           </div>
