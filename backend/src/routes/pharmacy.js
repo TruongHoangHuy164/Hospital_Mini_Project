@@ -11,72 +11,137 @@ const LoaiThuoc = require('../models/LoaiThuoc');
 router.use(auth);
 router.use(authorize('pharmacy', 'admin'));
 
-// Get prescriptions pending for pharmacy
-router.get('/prescriptions', async (req, res) => {
+// Get pharmacy orders/prescriptions by status
+// GET /api/pharmacy/orders?status=WAITING_FOR_MEDICINE|PAID|PREPARING|COMPLETED&day=YYYY-MM-DD
+router.get('/orders', async (req, res) => {
   try {
-    const list = await DonThuoc.find({ status: { $in: ['issued', 'pending_pharmacy', 'dispensing'] } })
-      .populate('hoSoKhamId')
-      .sort({ createdAt: 1 });
-    res.json(list);
+    const { status, day } = req.query;
+    const filter = {};
+    
+    // Map workflow statuses to DonThuoc model statuses
+    const statusMap = {
+      'WAITING_FOR_MEDICINE': 'issued',
+      'PAID': 'pending_pharmacy',
+      'PREPARING': 'dispensing',
+      'COMPLETED': 'dispensed'
+    };
+    
+    if (status && statusMap[status]) {
+      filter.status = statusMap[status];
+    }
+    
+    // Date filtering for a specific day
+    if (day) {
+      const start = new Date(`${day}T00:00:00`);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      filter.ngayKeDon = { $gte: start, $lt: end };
+    }
+    
+    const orders = await DonThuoc.find(filter)
+      .populate({
+        path: 'hoSoKhamId',
+        select: 'benhNhanId bacSiId trangThai createdAt',
+        populate: [
+          { path: 'benhNhanId', select: 'hoTen soDienThoai ngaySinh' },
+          { path: 'bacSiId', select: 'hoTen' }
+        ]
+      })
+      .sort({ createdAt: -1 })
+      .limit(200);
+    
+    res.json(orders);
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
+    return res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 });
 
-// Dispense a prescription: mark as dispensed and optionally create CapThuoc records
-router.post('/prescriptions/:id/dispense', async (req, res) => {
+// Get pharmacy stats
+// GET /api/pharmacy/stats?date=YYYY-MM-DD
+router.get('/stats', async (req, res) => {
   try {
-    const id = req.params.id;
-    const don = await DonThuoc.findById(id);
+    const { date } = req.query;
+    const filter = {};
+    
+    if (date) {
+      const start = new Date(`${date}T00:00:00`);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+      filter.ngayKeDon = { $gte: start, $lt: end };
+    }
+    
+    const stats = {
+      waiting: 0,    // status: 'issued'
+      paid: 0,       // status: 'pending_pharmacy'
+      preparing: 0,  // status: 'dispensing'
+      completed: 0   // status: 'dispensed'
+    };
+    
+    stats.waiting = await DonThuoc.countDocuments({ ...filter, status: 'issued' });
+    stats.paid = await DonThuoc.countDocuments({ ...filter, status: 'pending_pharmacy' });
+    stats.preparing = await DonThuoc.countDocuments({ ...filter, status: 'dispensing' });
+    stats.completed = await DonThuoc.countDocuments({ ...filter, status: 'dispensed' });
+    
+    res.json(stats);
+  } catch (err) {
+    return res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+});
+
+// Pay for prescription: change from WAITING_FOR_MEDICINE to PAID
+// PATCH /api/pharmacy/orders/:id/pay
+router.patch('/orders/:id/pay', async (req, res) => {
+  try {
+    const { amount, note } = req.body || {};
+    const don = await DonThuoc.findById(req.params.id);
+    
     if (!don) return res.status(404).json({ message: 'Không tìm thấy đơn' });
+    if (don.status !== 'issued') return res.status(400).json({ message: 'Đơn không ở trạng thái "Chờ thanh toán"' });
+    
+    don.status = 'pending_pharmacy';
+    await don.save();
+    
+    res.json(don);
+  } catch (err) {
+    return res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+});
 
-    if (don.status === 'dispensed') return res.status(400).json({ message: 'Đơn đã được phát' });
+// Start preparing: change from PAID to PREPARING
+// PATCH /api/pharmacy/orders/:id/prepare
+router.patch('/orders/:id/prepare', async (req, res) => {
+  try {
+    const don = await DonThuoc.findById(req.params.id);
+    
+    if (!don) return res.status(404).json({ message: 'Không tìm thấy đơn' });
+    if (don.status !== 'pending_pharmacy') return res.status(400).json({ message: 'Đơn không ở trạng thái "Đã thanh toán"' });
+    
+    don.status = 'dispensing';
+    await don.save();
+    
+    res.json(don);
+  } catch (err) {
+    return res.status(500).json({ message: 'Lỗi server', error: err.message });
+  }
+});
 
-    // Mark as dispensed
+// Dispense/Complete: change from PREPARING to COMPLETED
+// PATCH /api/pharmacy/orders/:id/dispense
+router.patch('/orders/:id/dispense', async (req, res) => {
+  try {
+    const don = await DonThuoc.findById(req.params.id);
+    
+    if (!don) return res.status(404).json({ message: 'Không tìm thấy đơn' });
+    if (don.status !== 'dispensing') return res.status(400).json({ message: 'Đơn không ở trạng thái "Chuẩn bị"' });
+    
     don.status = 'dispensed';
     don.pharmacyIssuedBy = req.user._id;
     don.pharmacyIssuedAt = new Date();
     await don.save();
-
-    // Optionally, create CapThuoc records from items if provided
-    if (don.items && don.items.length) {
-      const caps = await Promise.all(
-        don.items.map(async (it) => {
-          try {
-            const cap = await CapThuoc.create({ donThuocId: don._id, thuocId: it.thuocId, soLuong: it.soLuong || it.quantity || 1 });
-            return cap;
-          } catch (e) {
-            return null;
-          }
-        })
-      );
-    }
-
-    res.json({ message: 'Đã đánh dấu là đã phát', don });
+    
+    res.json(don);
   } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
-  }
-});
-
-// Pay a prescription: mark as paid/pending_pharmacy so pharmacy can process
-router.post('/prescriptions/:id/pay', async (req, res) => {
-  try {
-    const id = req.params.id;
-    const don = await DonThuoc.findById(id);
-    if (!don) return res.status(404).json({ message: 'Không tìm thấy đơn' });
-
-    if (don.status === 'pending_pharmacy' || don.status === 'dispensing' || don.status === 'dispensed') {
-      return res.status(400).json({ message: 'Đơn đã được thanh toán hoặc đang xử lý' });
-    }
-
-    // Mark as pending_pharmacy to indicate payment received
-    don.status = 'pending_pharmacy';
-    await don.save();
-
-    // Optionally record a ThanhToan entry in future; for now just update status
-    res.json({ message: 'Đã đánh dấu là đã thu tiền', don });
-  } catch (err) {
-    res.status(500).json({ message: 'Lỗi server', error: err.message });
+    return res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
 });
 

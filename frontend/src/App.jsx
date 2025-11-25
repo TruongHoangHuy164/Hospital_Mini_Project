@@ -47,7 +47,8 @@ import LabOrders from './pages/lab/Orders'
 import RequirePharmacy from './pages/pharmacy/RequirePharmacy'
 import PharmacyLayout from './pages/pharmacy/Layout'
 import PharmacyDashboard from './pages/pharmacy/Dashboard'
-import PharmacyPrescriptions from './pages/pharmacy/Prescriptions'
+import PharmacyOrders from './pages/pharmacy/Orders'
+import PharmacyPrepare from './pages/pharmacy/Prepare'
 import PharmacyInventory from './pages/pharmacy/Inventory'
 import Intake from './pages/reception/Intake'
 import NewPatient from './pages/reception/NewPatient'
@@ -161,7 +162,8 @@ export default function App() {
       <Route path="/pharmacy" element={<RequirePharmacy><PharmacyLayout /></RequirePharmacy>}>
         <Route index element={<PharmacyDashboard />} />
         <Route path="dashboard" element={<PharmacyDashboard />} />
-        <Route path="prescriptions" element={<PharmacyPrescriptions />} />
+        <Route path="orders" element={<PharmacyOrders />} />
+        <Route path="prepare" element={<PharmacyPrepare />} />
         <Route path="inventory" element={<PharmacyInventory />} />
         <Route path="my-schedule" element={<MySchedule />} />
       </Route>

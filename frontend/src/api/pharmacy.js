@@ -1,5 +1,13 @@
 import { privateApi, publicApi } from './axios';
 
+// Workflow APIs
+export const getPharmacyOrders = (params = {}) => privateApi.get('/pharmacy/orders', { params });
+export const getPharmacyStats = (params = {}) => privateApi.get('/pharmacy/stats', { params });
+export const payOrder = (id, data = {}) => privateApi.patch(`/pharmacy/orders/${id}/pay`, data);
+export const prepareOrder = (id, data = {}) => privateApi.patch(`/pharmacy/orders/${id}/prepare`, data);
+export const dispenseOrder = (id, data = {}) => privateApi.patch(`/pharmacy/orders/${id}/dispense`, data);
+
+// Legacy APIs (kept for compatibility)
 export const getPendingPrescriptions = () => privateApi.get('/pharmacy/prescriptions');
 export const dispensePrescription = (id) => privateApi.post(`/pharmacy/prescriptions/${id}/dispense`);
 export const payPrescription = (id) => privateApi.post(`/pharmacy/prescriptions/${id}/pay`);
@@ -24,6 +32,11 @@ export const getPublicMedicine = (id) => publicApi.get(`/public/medicines/${id}`
 export const getPublicMedicineCategories = () => publicApi.get('/public/medicine-categories');
 
 export default {
+  getPharmacyOrders,
+  getPharmacyStats,
+  payOrder,
+  prepareOrder,
+  dispenseOrder,
   getPendingPrescriptions,
   dispensePrescription,
   getInventory,

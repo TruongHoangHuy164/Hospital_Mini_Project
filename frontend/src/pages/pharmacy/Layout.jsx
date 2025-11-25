@@ -14,7 +14,8 @@ export default function PharmacyLayout() {
             <Link to="/pharmacy" className="navbar-brand my-3"><i className="bi bi-capsule"></i> Nhà thuốc</Link>
             <ul className="nav nav-pills flex-column mb-auto w-100">
               <li className="nav-item"><Link to="/pharmacy/dashboard" className="nav-link">Bảng điều khiển</Link></li>
-              <li className="nav-item"><Link to="/pharmacy/prescriptions" className="nav-link">Đơn chờ/Phát thuốc</Link></li>
+              <li className="nav-item"><Link to="/pharmacy/orders" className="nav-link">Thu tiền</Link></li>
+              <li className="nav-item"><Link to="/pharmacy/prepare" className="nav-link">Chuẩn bị & Giao</Link></li>
               <li className="nav-item"><Link to="/pharmacy/inventory" className="nav-link">Quản lý kho</Link></li>
               <li className="nav-item"><Link to="/pharmacy/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
