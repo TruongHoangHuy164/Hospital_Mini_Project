@@ -4,13 +4,23 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function DoctorDashboard() {
   // ===== TAB STATE =====
-  const [activeTab, setActiveTab] = useState('call'); // 'call', 'exam', 'referral', 'results', 'prescription'
+  const [activeTab, setActiveTab] = useState('call'); // 'call', 'history', 'exam', 'referral', 'results', 'prescription'
   
   // ===== CORE STATES =====
   const todayDate = new Date().toISOString().slice(0,10);
   const [todayPatients, setTodayPatients] = useState([]);
   const [selectedCase, setSelectedCase] = useState(null);
   const [caseDetail, setCaseDetail] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(todayDate); // Ngày khám để xem lịch sử
+  const [historyFilter, setHistoryFilter] = useState('today'); // 'today', 'month', 'custom'
+  const [patientHistoryModal, setPatientHistoryModal] = useState(false); // Modal xem lịch sử khám
+  const [patientHistoryList, setPatientHistoryList] = useState([]); // Danh sách lần khám trước
+  const [selectedPatientHistory, setSelectedPatientHistory] = useState(null); // Bệnh nhân xem lịch sử
+  const [historySearchQuery, setHistorySearchQuery] = useState(''); // Tìm kiếm bệnh nhân để xem lịch sử
+  const [historySearchResults, setHistorySearchResults] = useState([]); // Kết quả tìm kiếm bệnh nhân
+  
+  // ===== STATISTICS STATES =====
+  const [stats, setStats] = useState({ chiDinhPending: 0, toaThuoc: 0 });
   
   // ===== EXAMINATION STATES =====
   const [clinical, setClinical] = useState({ trieuChung: '', khamLamSang: '', huyetAp: '', nhipTim: '', nhietDo: '', canNang: '', chieuCao: '' });
@@ -53,7 +63,77 @@ export default function DoctorDashboard() {
     }catch(e){ console.error(e); }
   }
 
-  useEffect(() => { loadTodayPatients(); }, []);
+  // ===== LOAD HISTORY BY DATE =====
+  async function loadHistoryByDate(date){
+    try{
+      const res = await fetch(`${API_URL}/api/doctor/patients?date=${date}`, { headers });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      setTodayPatients(Array.isArray(json) ? json : (json?.patients || []));
+    }catch(e){ console.error(e); alert('Lỗi tải dữ liệu'); setTodayPatients([]);
+    }
+  }
+
+  // ===== LOAD HISTORY BY MONTH =====
+  async function loadHistoryByMonth(year, month){
+    try{
+      const res = await fetch(`${API_URL}/api/doctor/patients?year=${year}&month=${month}`, { headers });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      setTodayPatients(Array.isArray(json) ? json : (json?.patients || []));
+    }catch(e){ console.error(e); alert('Lỗi tải dữ liệu'); setTodayPatients([]);
+    }
+  }
+
+  useEffect(() => { 
+    loadTodayPatients(); 
+    loadTodayStats();
+  }, []);
+
+  // ===== LOAD PATIENT PREVIOUS VISITS =====
+  async function loadPatientHistory(benhNhanId){
+    try{
+      const res = await fetch(`${API_URL}/api/doctor/patients/${benhNhanId}/history`, { headers });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      setPatientHistoryList(Array.isArray(json) ? json : (json?.cases || []));
+    }catch(e){ console.error(e); alert('Lỗi tải lịch sử khám'); }
+  }
+
+  // ===== LOAD TODAY'S STATISTICS =====
+  async function loadTodayStats(){
+    try{
+      const res = await fetch(`${API_URL}/api/doctor/today/stats`, { headers });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      setStats(json || { chiDinhPending: 0, toaThuoc: 0 });
+    }catch(e){ console.error(e); }
+  }
+
+  function openPatientHistoryModal(benhNhan){
+    setSelectedPatientHistory(benhNhan);
+    loadPatientHistory(benhNhan._id);
+    setPatientHistoryModal(true);
+  }
+
+  // ===== SEARCH PATIENTS FOR HISTORY TAB =====
+  async function searchPatientsByName(){
+    if(!historySearchQuery.trim()) {
+      setHistorySearchResults([]);
+      return;
+    }
+    try{
+      const res = await fetch(`${API_URL}/api/patients?q=${encodeURIComponent(historySearchQuery)}`, { headers });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      setHistorySearchResults(Array.isArray(json) ? json : (json?.patients || []));
+    }catch(e){ console.error(e); setHistorySearchResults([]); }
+  }
+
+  useEffect(() => {
+    const delay = setTimeout(searchPatientsByName, 300);
+    return () => clearTimeout(delay);
+  }, [historySearchQuery]);
 
   // ===== OPEN A CASE =====
   async function openCase(hsId){
@@ -305,15 +385,23 @@ export default function DoctorDashboard() {
       const res = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/complete`, { method:'POST', headers });
       const json = await res.json();
       if(!res.ok) throw json;
-      alert('Đã kết thúc ca khám');
+      
+      // Làm sạch trạng thái
       setSelectedCase(null);
       setCaseDetail(null);
       setLabs([]);
       setHistory([]);
       setPrescriptions([]);
       setRxItems([]);
+      setClinical({ trieuChung: '', khamLamSang: '', huyetAp: '', nhipTim: '', nhietDo: '', canNang: '', chieuCao: '' });
       setActiveTab('call');
+      
+      // Tải lại danh sách bệnh nhân và thống kê
       await loadTodayPatients();
+      await loadTodayStats();
+      
+      // Thông báo thành công
+      alert('✅ Đã kết thúc ca khám. Bấm "Gọi tiếp" để tiếp nhận bệnh nhân tiếp theo.');
     }catch(e){ alert(e?.message || 'Lỗi kết thúc ca'); }
   }
 
@@ -334,6 +422,138 @@ export default function DoctorDashboard() {
 
   return (
     <div className="py-3">
+      {/* ===== STATISTICS SECTION ===== */}
+      <div className="container-fluid mb-3">
+        <div className="row g-3">
+          <div className="col-md-3">
+            <div className="card border-0 shadow-sm bg-primary bg-opacity-10 h-100">
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="me-3">
+                    <i className="bi bi-person-fill fs-3 text-primary"></i>
+                  </div>
+                  <div>
+                    <small className="text-muted d-block">Bệnh nhân hôm nay</small>
+                    <h5 className="mb-0 fw-bold text-primary">{Array.isArray(todayPatients) ? todayPatients.length : 0}</h5>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="card border-0 shadow-sm bg-warning bg-opacity-10 h-100">
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="me-3">
+                    <i className="bi bi-hourglass-split fs-3 text-warning"></i>
+                  </div>
+                  <div>
+                    <small className="text-muted d-block">Đang chờ khám</small>
+                    <h5 className="mb-0 fw-bold text-warning">{Array.isArray(todayPatients) ? todayPatients.filter(p => p.trangThai === 'cho_kham').length : 0}</h5>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="card border-0 shadow-sm bg-info bg-opacity-10 h-100">
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="me-3">
+                    <i className="bi bi-clipboard-check fs-3 text-info"></i>
+                  </div>
+                  <div>
+                    <small className="text-muted d-block">Số chỉ định chờ kết quả</small>
+                    <h5 className="mb-0 fw-bold text-info">{stats.chiDinhPending}</h5>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-3">
+            <div className="card border-0 shadow-sm bg-success bg-opacity-10 h-100">
+              <div className="card-body p-3">
+                <div className="d-flex align-items-center">
+                  <div className="me-3">
+                    <i className="bi bi-capsule fs-3 text-success"></i>
+                  </div>
+                  <div>
+                    <small className="text-muted d-block">Toa thuốc đã kê</small>
+                    <h5 className="mb-0 fw-bold text-success">{stats.toaThuoc}</h5>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ===== DATE/MONTH FILTER FOR HISTORY ===== */}
+      <div className="container-fluid mb-3">
+        <div className="card shadow-sm border-0 bg-light">
+          <div className="card-body p-3">
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <div>
+                <i className="bi bi-calendar3 me-2 text-muted"></i>
+                <small className="text-muted fw-semibold">Xem lịch sử khám:</small>
+              </div>
+              
+              {/* Hôm nay */}
+              <button 
+                className={`btn btn-sm ${historyFilter === 'today' ? 'btn-primary' : 'btn-outline-primary'}`}
+                onClick={() => {
+                  setHistoryFilter('today');
+                  setSelectedDate(todayDate);
+                  loadTodayPatients();
+                }}
+              >
+                <i className="bi bi-calendar-day me-1"></i>Hôm nay
+              </button>
+
+              {/* Chọn ngày */}
+              <div>
+                <input 
+                  type="date" 
+                  className="form-control form-control-sm"
+                  value={selectedDate}
+                  max={todayDate}
+                  onChange={(e) => {
+                    setSelectedDate(e.target.value);
+                    setHistoryFilter('date');
+                    loadHistoryByDate(e.target.value);
+                  }}
+                />
+              </div>
+
+              {/* Chọn tháng */}
+              <div>
+                <input 
+                  type="month" 
+                  className="form-control form-control-sm"
+                  defaultValue={todayDate.slice(0, 7)}
+                  onChange={(e) => {
+                    if(e.target.value) {
+                      const [year, month] = e.target.value.split('-');
+                      setHistoryFilter('month');
+                      loadHistoryByMonth(year, month);
+                    }
+                  }}
+                />
+              </div>
+
+              {/* Status Badge */}
+              <div className="ms-auto">
+                <span className="badge bg-secondary">
+                  {historyFilter === 'today' && '📅 Hôm nay'}
+                  {historyFilter === 'date' && `📆 ${new Date(selectedDate).toLocaleDateString('vi-VN')}`}
+                  {historyFilter === 'month' && '📊 Tháng'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* ===== TAB NAVIGATION ===== */}
       <div className="container-fluid mb-3">
         <div className="card shadow-sm border-0">
@@ -345,6 +565,13 @@ export default function DoctorDashboard() {
                 role="tab"
               >
                 <i className="bi bi-telephone-fill me-2"></i>Gọi bệnh nhân
+              </button>
+              <button 
+                className={`nav-link fw-semibold ${activeTab === 'history' ? 'active border-bottom border-3 border-primary text-primary' : 'text-muted'}`}
+                onClick={() => setActiveTab('history')}
+                role="tab"
+              >
+                <i className="bi bi-clock-history me-2"></i>Xem lịch sử
               </button>
               <button 
                 className={`nav-link fw-semibold ${activeTab === 'exam' ? 'active border-bottom border-3 border-primary text-primary' : !selectedCase ? 'disabled text-muted' : 'text-muted'}`}
@@ -432,11 +659,16 @@ export default function DoctorDashboard() {
                         const year = it.benhNhan?.ngaySinh ? new Date(it.benhNhan.ngaySinh).getFullYear() : '';
                         let stLabel = 'Chờ khám';
                         let stBadge = 'bg-warning';
-                        if(selectedCase && caseDetail?.benhNhanId?._id === it.benhNhan?._id) {
-                          stLabel = 'Đang khám';
+                        
+                        // Kiểm tra trạng thái tổng thể của LichKham
+                        if(it.trangThai === 'hoan_tat') {
+                          stLabel = '✅ Hoàn tất';
                           stBadge = 'bg-success';
+                        } else if(selectedCase && caseDetail?.benhNhanId?._id === it.benhNhan?._id) {
+                          stLabel = 'Đang khám';
+                          stBadge = 'bg-info';
                         }
-                        const disabled = !it.soThuTu;
+                        const disabled = !it.soThuTu || it.trangThai === 'hoan_tat';
                         return (
                           <tr key={idx} className={selectedCase?.benhNhanId?._id === it.benhNhan?._id ? 'table-active' : ''}>
                             <td>
@@ -449,6 +681,13 @@ export default function DoctorDashboard() {
                             </td>
                             <td className="text-end">
                               <div className="btn-group btn-group-sm" role="group">
+                                <button 
+                                  className="btn btn-outline-secondary" 
+                                  title="Xem lịch sử khám"
+                                  onClick={() => openPatientHistoryModal(it.benhNhan)}
+                                >
+                                  <i className="bi bi-clock-history"></i>
+                                </button>
                                 <button 
                                   disabled={disabled} 
                                   className="btn btn-outline-success" 
@@ -480,6 +719,82 @@ export default function DoctorDashboard() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* HISTORY SEARCH TAB */}
+        {activeTab === 'history' && (
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-light border-0">
+              <h5 className="mb-0">
+                <i className="bi bi-clock-history text-primary me-2"></i>Xem lịch sử khám bệnh nhân
+              </h5>
+            </div>
+            <div className="card-body">
+              {/* Search Box */}
+              <div className="mb-4">
+                <label className="form-label fw-semibold">
+                  <i className="bi bi-search me-2"></i>Tìm bệnh nhân
+                </label>
+                <input 
+                  type="text"
+                  className="form-control form-control-lg"
+                  placeholder="Nhập tên hoặc số điện thoại bệnh nhân..."
+                  value={historySearchQuery}
+                  onChange={e => setHistorySearchQuery(e.target.value)}
+                />
+              </div>
+
+              {/* Search Results */}
+              {historySearchQuery.trim() && (
+                <div>
+                  <label className="form-label fw-semibold small text-muted">
+                    Kết quả tìm kiếm ({historySearchResults.length})
+                  </label>
+                  {historySearchResults.length > 0 ? (
+                    <div className="list-group">
+                      {historySearchResults.map(bn => {
+                        const year = bn.ngaySinh ? new Date(bn.ngaySinh).getFullYear() : '';
+                        return (
+                          <div key={bn._id} className="list-group-item">
+                            <div className="d-flex justify-content-between align-items-center">
+                              <div>
+                                <div className="fw-semibold">{bn.hoTen}</div>
+                                <small className="text-muted">
+                                  📱 {bn.soDienThoai || '---'} • 🎂 {year || '---'}
+                                </small>
+                              </div>
+                              <button 
+                                className="btn btn-primary btn-sm"
+                                onClick={() => {
+                                  setSelectedPatientHistory(bn);
+                                  loadPatientHistory(bn._id);
+                                  setPatientHistoryModal(true);
+                                }}
+                              >
+                                <i className="bi bi-clipboard-check me-1"></i>Xem lịch sử
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="alert alert-info">
+                      <i className="bi bi-info-circle me-2"></i>
+                      Không tìm thấy bệnh nhân
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!historySearchQuery.trim() && (
+                <div className="alert alert-secondary text-center py-5">
+                  <i className="bi bi-search fs-1 d-block mb-2"></i>
+                  <p className="mb-0">Nhập tên hoặc số điện thoại để tìm kiếm bệnh nhân</p>
                 </div>
               )}
             </div>
@@ -1071,6 +1386,167 @@ export default function DoctorDashboard() {
           </div>
         )}
       </div>
+
+      {/* ===== PATIENT HISTORY MODAL ===== */}
+      {patientHistoryModal && (
+        <div className="modal d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+          <div className="modal-dialog modal-lg">
+            <div className="modal-content">
+              <div className="modal-header bg-light border-0">
+                <h5 className="modal-title">
+                  <i className="bi bi-clock-history me-2 text-primary"></i>
+                  Lịch sử khám - {selectedPatientHistory?.hoTen}
+                </h5>
+                <button 
+                  type="button" 
+                  className="btn-close" 
+                  onClick={() => setPatientHistoryModal(false)}
+                ></button>
+              </div>
+              <div className="modal-body" style={{maxHeight: '60vh', overflowY: 'auto'}}>
+                {patientHistoryList.length > 0 ? (
+                  <div className="accordion" id="historyAccordion">
+                    {patientHistoryList.map((hs, idx) => (
+                      <div key={hs._id} className="accordion-item">
+                        <h2 className="accordion-header">
+                          <button 
+                            className="accordion-button collapsed" 
+                            type="button" 
+                            data-bs-toggle="collapse" 
+                            data-bs-target={`#history${idx}`}
+                          >
+                            <div className="d-flex gap-2 w-100">
+                              <small className="text-muted">
+                                {new Date(hs.ngayKham).toLocaleString('vi-VN')}
+                              </small>
+                              <span className="badge bg-secondary ms-2">
+                                {hs.trangThai || 'Chưa xác định'}
+                              </span>
+                            </div>
+                          </button>
+                        </h2>
+                        <div id={`history${idx}`} className="accordion-collapse collapse" data-bs-parent="#historyAccordion">
+                          <div className="accordion-body p-3">
+                            {/* Thông tin lâm sàng */}
+                            <div className="mb-3">
+                              <h6 className="fw-semibold mb-2">📋 Thông tin lâm sàng</h6>
+                              <div className="row g-2 small">
+                                <div className="col-md-6">
+                                  <div><strong>Triệu chứng:</strong></div>
+                                  <p className="text-muted">{hs.trieuChung || '(không có)'}</p>
+                                </div>
+                                <div className="col-md-6">
+                                  <div><strong>Khám lâm sàng:</strong></div>
+                                  <p className="text-muted">{hs.khamLamSang || '(không có)'}</p>
+                                </div>
+                                <div className="col-md-3">
+                                  <div><strong>Huyết áp:</strong> {hs.sinhHieu?.huyetAp || '-'}</div>
+                                </div>
+                                <div className="col-md-3">
+                                  <div><strong>Nhịp tim:</strong> {hs.sinhHieu?.nhipTim || '-'} bpm</div>
+                                </div>
+                                <div className="col-md-3">
+                                  <div><strong>Nhiệt độ:</strong> {hs.sinhHieu?.nhietDo || '-'}°C</div>
+                                </div>
+                                <div className="col-md-3">
+                                  <div><strong>Cân nặng:</strong> {hs.sinhHieu?.canNang || '-'} kg</div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Chỉ định */}
+                            {hs.chiDinh && hs.chiDinh.length > 0 && (
+                              <div className="mb-3">
+                                <h6 className="fw-semibold mb-2">🔬 Chỉ định xét nghiệm</h6>
+                                <div className="list-group list-group-sm">
+                                  {hs.chiDinh.map((cd, i) => (
+                                    <div key={i} className="list-group-item">
+                                      <div className="d-flex justify-content-between align-items-start mb-2">
+                                        <div className="flex-grow-1">
+                                          <div className="small fw-semibold">{cd.dichVuId?.ten || cd.loaiChiDinh || '---'}</div>
+                                          <small className="text-muted d-block">{cd.dichVuId?.chuyenKhoaId?.ten || ''}</small>
+                                        </div>
+                                        <span className={`badge ms-2 ${cd.trangThai === 'da_xong' ? 'bg-success' : cd.trangThai === 'cho_thuc_hien' ? 'bg-warning' : 'bg-secondary'}`}>
+                                          {cd.trangThai === 'da_xong' ? '✓ Hoàn thành' : cd.trangThai === 'cho_thuc_hien' ? '⏳ Chờ thực hiện' : 'Chờ'}
+                                        </span>
+                                      </div>
+                                      
+                                      {cd.ketQua && (
+                                        <div className="alert alert-success alert-sm mb-0 p-2">
+                                          <strong className="d-block small mb-1">📋 Kết quả:</strong>
+                                          <p className="small mb-0 text-break">{cd.ketQua}</p>
+                                          {cd.ghiChu && (
+                                            <p className="small text-muted mt-1 mb-0">
+                                              <strong>📝 Ghi chú:</strong> {cd.ghiChu}
+                                            </p>
+                                          )}
+                                        </div>
+                                      )}
+                                      
+                                      {!cd.ketQua && cd.trangThai === 'da_xong' && (
+                                        <div className="alert alert-info alert-sm mb-0 p-2">
+                                          <small className="text-muted">Xét nghiệm hoàn thành nhưng chưa có kết quả</small>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Đơn thuốc */}
+                            {hs.donThuoc && hs.donThuoc.length > 0 && (
+                              <div className="mb-3">
+                                <h6 className="fw-semibold mb-2">💊 Đơn thuốc</h6>
+                                <ul className="list-group list-group-sm">
+                                  {hs.donThuoc.map((dt, i) => (
+                                    <li key={i} className="list-group-item">
+                                      <div className="d-flex justify-content-between">
+                                        <div className="small">
+                                          <div className="fw-semibold">{dt.tenThuoc || dt.thuocId?.tenThuoc || '---'}</div>
+                                          <small className="text-muted">
+                                            {dt.soLuong} x {dt.cachDung || '---'} - {dt.soNgay || '---'} ngày
+                                          </small>
+                                        </div>
+                                        {dt.ghi && <small className="text-muted ms-2">{dt.ghi}</small>}
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            )}
+
+                            {/* Ghi chú */}
+                            {hs.ghiChu && (
+                              <div className="alert alert-info alert-sm mb-0">
+                                <strong>📝 Ghi chú:</strong> {hs.ghiChu}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="alert alert-info mb-0">
+                    <i className="bi bi-info-circle me-2"></i>
+                    Không có lần khám nào trong lịch sử
+                  </div>
+                )}
+              </div>
+              <div className="modal-footer bg-light border-0">
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setPatientHistoryModal(false)}
+                >
+                  Đóng
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -258,4 +258,28 @@ router.get('/:id', requireReceptionOrAdmin, async (req, res, next) => {
   } catch(err){ next(err); }
 });
 
+// GET /api/patients?q=... - Public search for patients (used by doctor for history search)
+router.get('/', async (req, res, next) => {
+  try {
+    const q = (req.query.q || '').trim();
+    if(!q) return res.json([]);
+
+    const filter = {
+      $or: [
+        { hoTen: { $regex: q, $options: 'i' } },
+        { soDienThoai: { $regex: q, $options: 'i' } }
+      ]
+    };
+
+    const limit = Math.min(parseInt(req.query.limit||'20',10), 50);
+    const patients = await Patient.find(filter)
+      .select('_id hoTen soDienThoai ngaySinh gioiTinh diaChi')
+      .limit(limit)
+      .sort({ hoTen: 1 })
+      .lean();
+
+    res.json(patients);
+  } catch(err){ next(err); }
+});
+
 module.exports = router;

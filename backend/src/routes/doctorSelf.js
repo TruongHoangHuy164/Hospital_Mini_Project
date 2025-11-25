@@ -42,20 +42,86 @@ router.get('/me', async (req, res, next) => {
 });
 
 // PUT /api/doctor/me - cập nhật thông tin cá nhân (giới hạn các trường cho phép)
-router.put('/me', async (req, res, next) => {
+router.put('/me', loadDoctor, async (req, res, next) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) return res.status(401).json({ message: 'Unauthorized' });
     const allow = ['hoTen','email','soDienThoai','diaChi','anhDaiDien','moTa','ngaySinh','gioiTinh'];
     const body = req.body || {};
     const update = {};
-    for (const k of allow) {
-      if (typeof body[k] !== 'undefined') update[k] = body[k];
+    
+    // Validation
+    if(body.hoTen !== undefined) {
+      if(typeof body.hoTen !== 'string' || body.hoTen.trim().length === 0) {
+        return res.status(400).json({ message: 'Họ tên không được để trống' });
+      }
+      update.hoTen = body.hoTen.trim();
     }
-    const bs = await BacSi.findOneAndUpdate({ userId }, update, { new: true })
+    
+    if(body.email !== undefined) {
+      if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+        return res.status(400).json({ message: 'Email không hợp lệ' });
+      }
+      update.email = body.email.toLowerCase().trim();
+    }
+    
+    if(body.soDienThoai !== undefined) {
+      if(body.soDienThoai && !/^[0-9]{10,11}$/.test(body.soDienThoai.replace(/\D/g, ''))) {
+        return res.status(400).json({ message: 'Số điện thoại không hợp lệ (10-11 chữ số)' });
+      }
+      const phone = body.soDienThoai?.trim() || '';
+      
+      // Check duplicate phone (not belong to current doctor)
+      if(phone) {
+        const existingDoctor = await BacSi.findOne({ 
+          soDienThoai: phone,
+          _id: { $ne: req.doctor._id }
+        });
+        if(existingDoctor) {
+          return res.status(400).json({ message: 'Số điện thoại này đã được sử dụng' });
+        }
+      }
+      
+      update.soDienThoai = phone;
+    }
+    
+    if(body.diaChi !== undefined) {
+      update.diaChi = body.diaChi?.trim() || '';
+    }
+    
+    if(body.moTa !== undefined) {
+      const desc = body.moTa?.trim() || '';
+      if(desc.length > 500) {
+        return res.status(400).json({ message: 'Mô tả tối đa 500 ký tự' });
+      }
+      update.moTa = desc;
+    }
+    
+    if(body.anhDaiDien !== undefined) {
+      update.anhDaiDien = body.anhDaiDien;
+    }
+    
+    if(body.ngaySinh !== undefined) {
+      if(body.ngaySinh) {
+        const dob = new Date(body.ngaySinh);
+        if(isNaN(dob.getTime())) {
+          return res.status(400).json({ message: 'Ngày sinh không hợp lệ' });
+        }
+        update.ngaySinh = dob;
+      } else {
+        update.ngaySinh = null;
+      }
+    }
+    
+    if(body.gioiTinh !== undefined) {
+      if(!['nam','nu','khac'].includes(body.gioiTinh)) {
+        return res.status(400).json({ message: 'Giới tính không hợp lệ' });
+      }
+      update.gioiTinh = body.gioiTinh;
+    }
+    
+    const bs = await BacSi.findByIdAndUpdate(req.doctor._id, update, { new: true })
       .populate('phongKhamId', 'tenPhong chuyenKhoa')
       .populate('userId', 'email role');
-    if (!bs) return res.status(404).json({ message: 'Chưa liên kết hồ sơ bác sĩ với tài khoản này' });
+    
     return res.json(bs);
   } catch (err) { return next(err); }
 });
@@ -299,6 +365,40 @@ router.get('/today/patients', loadDoctor, async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
+// ===== GET TODAY'S STATISTICS =====
+// GET /api/doctor/today/stats - lấy thống kê của ngày hôm nay
+router.get('/today/stats', loadDoctor, async (req, res, next) => {
+  try{
+    const today = new Date();
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1);
+    
+    // Lấy tất cả hồ sơ khám của bác sĩ trong ngày hôm nay
+    const hoSoKhams = await HoSoKham.find({ 
+      bacSiId: req.doctor._id, 
+      ngayKham: { $gte: start, $lt: end } 
+    }).select('_id').lean();
+    
+    const hoSoKhamIds = hoSoKhams.map(h => h._id);
+    
+    // Đếm chỉ định chưa có kết quả
+    const pendingLabs = await CanLamSang.countDocuments({
+      hoSoKhamId: { $in: hoSoKhamIds },
+      ketQua: { $exists: false } // Chưa có kết quả
+    });
+    
+    // Đếm đơn thuốc
+    const prescriptions = await DonThuoc.countDocuments({
+      hoSoKhamId: { $in: hoSoKhamIds }
+    });
+    
+    res.json({ 
+      chiDinhPending: pendingLabs,
+      toaThuoc: prescriptions
+    });
+  }catch(err){ return next(err); }
+});
+
 // ===== Tiếp nhận bệnh nhân theo lịch (tạo hồ sơ khám từ STT) =====
 // POST /api/doctor/appointments/:id/intake
 router.post('/appointments/:id/intake', loadDoctor, async (req, res, next) => {
@@ -478,8 +578,29 @@ router.put('/cases/:id', loadDoctor, async (req, res, next) => {
 
 router.post('/cases/:id/complete', loadDoctor, async (req, res, next) => {
   try{
-    const hs = await HoSoKham.findOneAndUpdate({ _id: req.params.id, bacSiId: req.doctor._id }, { trangThai: 'hoan_tat', ketThucLuc: new Date() }, { new: true });
+    // Cập nhật HoSoKham
+    const hs = await HoSoKham.findOneAndUpdate(
+      { _id: req.params.id, bacSiId: req.doctor._id }, 
+      { trangThai: 'hoan_tat', ketThucLuc: new Date() }, 
+      { new: true }
+    );
     if(!hs) return res.status(404).json({ message: 'Không tìm thấy hồ sơ' });
+    
+    // Cập nhật LichKham có HoSoKham này thành 'hoan_tat'
+    const lk = await LichKham.findOne({ _id: hs.lichKhamId });
+    if(lk) {
+      lk.trangThai = 'hoan_tat';
+      await lk.save();
+    }
+    
+    // Cập nhật SoThuTu thành 'hoan_tat'
+    if(lk) {
+      await SoThuTu.updateOne(
+        { lichKhamId: lk._id },
+        { trangThai: 'hoan_tat' }
+      );
+    }
+    
     res.json(hs);
   }catch(err){ return next(err); }
 });
@@ -560,5 +681,49 @@ router.get('/patients/:id/cases', loadDoctor, async (req, res, next) => {
     res.json({ items, total, page, limit });
   }catch(err){ return next(err); }
 });
+
+// ===== GET /api/doctor/patients/:id/history - Lịch sử khám của bệnh nhân (tất cả lần khám) =====
+router.get('/patients/:id/history', loadDoctor, async (req, res, next) => {
+  try{
+    const benhNhanId = req.params.id;
+    const limit = Math.min(parseInt(req.query.limit||'100',10), 100);
+    const page = Math.max(parseInt(req.query.page||'1',10), 1);
+    
+    // Tìm tất cả hồ sơ khám của bệnh nhân (không giới hạn theo bác sĩ)
+    const [cases, total] = await Promise.all([
+      HoSoKham.find({ benhNhanId })
+        .sort({ ngayKham: -1, createdAt: -1 })
+        .skip((page-1)*limit)
+        .limit(limit)
+        .populate('benhNhanId', 'hoTen soDienThoai ngaySinh gioiTinh')
+        .populate('bacSiId', 'hoTen chuyenKhoa')
+        .lean(),
+      HoSoKham.countDocuments({ benhNhanId })
+    ]);
+
+    // Nếu cần thêm chi tiết chỉ định và đơn thuốc
+    const enriched = await Promise.all(cases.map(async (hs) => {
+      const [chiDinh, donThuoc] = await Promise.all([
+        CanLamSang.find({ hoSoKhamId: hs._id })
+          .populate('dichVuId', 'ten gia chuyenKhoaId')
+          .lean(),
+        DonThuoc.find({ hoSoKhamId: hs._id })
+          .populate('items.thuocId', 'tenThuoc donViTinh loaiThuoc gia')
+          .lean()
+      ]);
+      return {
+        ...hs,
+        chiDinh,
+        donThuoc: donThuoc.flatMap(dt => dt.items || [])
+      };
+    }));
+
+    res.json(enriched);
+  }catch(err){ return next(err); }
+});
+
+// ===== GET /api/patients?q=... - Tìm bệnh nhân theo tên/sđt (dùng cho lịch sử) =====
+// Thêm vào routes/patients.js thay vì doctorSelf
+// Vì frontend gọi /api/patients?q=...
 
 module.exports = router;
