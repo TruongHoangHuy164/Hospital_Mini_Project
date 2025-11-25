@@ -420,6 +420,38 @@ export default function DoctorDashboard() {
     return statuses[caseDetail.trangThai] || caseDetail.trangThai || 'N/A';
   }
 
+  function extractProvince(address) {
+    if (!address) return 'N/A';
+    
+    // List of Vietnamese provinces and cities
+    const provinces = [
+      'Hà Nội', 'TP. Hồ Chí Minh', 'Hồ Chí Minh', 'Đà Nẵng', 'Hải Phòng', 'Cần Thơ',
+      'An Giang', 'Bà Rịa - Vũng Tàu', 'Bạc Liêu', 'Bắc Giang', 'Bắc Kạn', 'Bắc Ninh',
+      'Bến Tre', 'Bình Dương', 'Bình Phước', 'Bình Thuận', 'Cà Mau', 'Cao Bằng',
+      'Đắk Lắk', 'Đắk Nông', 'Điện Biên', 'Đồng Nai', 'Đồng Tháp', 'Gia Lai',
+      'Hà Giang', 'Hà Nam', 'Hà Tĩnh', 'Hải Dương', 'Hậu Giang', 'Hòa Bình',
+      'Hưng Yên', 'Khánh Hòa', 'Kiên Giang', 'Kon Tum', 'Lai Châu', 'Lâm Đồng',
+      'Lạng Sơn', 'Lào Cai', 'Long An', 'Nam Định', 'Nghệ An', 'Ninh Bình',
+      'Ninh Thuận', 'Phú Thọ', 'Phú Yên', 'Quảng Bình', 'Quảng Nam', 'Quảng Ngãi',
+      'Quảng Ninh', 'Quảng Trị', 'Sóc Trăng', 'Sơn La', 'Tây Ninh', 'Thái Bình',
+      'Thái Nguyên', 'Thanh Hóa', 'Thừa Thiên - Huế', 'Tiền Giang', 'TP Hồ Chí Minh',
+      'TP Hà Nội', 'Trà Vinh', 'Tuyên Quang', 'Vĩnh Long', 'Vĩnh Phúc', 'Yên Bái'
+    ];
+
+    // Sort by length descending to match longer names first
+    const sorted = provinces.sort((a, b) => b.length - a.length);
+    
+    for (const prov of sorted) {
+      if (address.includes(prov)) {
+        return prov;
+      }
+    }
+    
+    // If no match, try to get the last part (assuming format: street, district, province)
+    const parts = address.split(',').map(p => p.trim());
+    return parts[parts.length - 1] || 'N/A';
+  }
+
   return (
     <div className="py-3">
       {/* ===== STATISTICS SECTION ===== */}
@@ -817,6 +849,85 @@ export default function DoctorDashboard() {
                 </div>
               </div>
             </div>
+            
+            {/* Patient Info Card */}
+            <div className="card-body bg-light border-bottom">
+              <div className="row g-3">
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-person-circle text-primary fs-5"></i>
+                    <div>
+                      <small className="text-muted d-block">Họ tên</small>
+                      <strong className="text-break">{caseDetail?.benhNhanId?.hoTen || 'N/A'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-calendar-event text-success fs-5"></i>
+                    <div>
+                      <small className="text-muted d-block">Tuổi</small>
+                      <strong>
+                        {caseDetail?.benhNhanId?.ngaySinh 
+                          ? new Date().getFullYear() - new Date(caseDetail.benhNhanId.ngaySinh).getFullYear() 
+                          : 'N/A'} tuổi
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-venus-mars text-warning fs-5"></i>
+                    <div>
+                      <small className="text-muted d-block">Giới tính</small>
+                      <strong>
+                        {caseDetail?.benhNhanId?.gioiTinh === 'nam' ? '👨 Nam' : 
+                         caseDetail?.benhNhanId?.gioiTinh === 'nu' ? '👩 Nữ' : 'Khác'}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-telephone text-danger fs-5"></i>
+                    <div>
+                      <small className="text-muted d-block">Số điện thoại</small>
+                      <strong className="text-break">{caseDetail?.benhNhanId?.soDienThoai || 'N/A'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-geo-alt text-info fs-5"></i>
+                    <div>
+                      <small className="text-muted d-block">Tỉnh/Thành phố</small>
+                      <strong className="text-break">{extractProvince(caseDetail?.benhNhanId?.diaChi) || 'N/A'}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="col-12">
+                  <div className="d-flex align-items-start gap-2">
+                    <i className="bi bi-map text-secondary fs-5" style={{marginTop: '2px'}}></i>
+                    <div style={{width: '100%'}}>
+                      <small className="text-muted d-block">Địa chỉ đầy đủ</small>
+                      <strong className="text-break">{caseDetail?.benhNhanId?.diaChi || 'N/A'}</strong>
+                    </div>
+                  </div>
+                </div>
+                {caseDetail?.benhNhanId?.maBHYT && (
+                  <div className="col-md-6">
+                    <div className="d-flex align-items-center gap-2">
+                      <i className="bi bi-card-text text-secondary fs-5"></i>
+                      <div>
+                        <small className="text-muted d-block">Mã BHYT</small>
+                        <strong className="text-break">{caseDetail.benhNhanId.maBHYT}</strong>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            
             <div className="card-body">
               <div className="row g-3">
                 <div className="col-12">
