@@ -3,28 +3,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function DoctorDashboard() {
-  const [patientQuery, setPatientQuery] = useState('');
-  const [patients, setPatients] = useState([]);
-  const [selectedPatient, setSelectedPatient] = useState(null);
-  const [newPatient, setNewPatient] = useState({ hoTen: '', soDienThoai: '' });
-  const [caseForm, setCaseForm] = useState({ chanDoan: '', huongDieuTri: 'ngoai_tru' });
-  const [casesToday, setCasesToday] = useState([]); // reused for selected day
-  const [loadingCases, setLoadingCases] = useState(false);
+  // ===== TAB STATE =====
+  const [activeTab, setActiveTab] = useState('call'); // 'call', 'exam', 'referral', 'results', 'prescription'
+  
+  // ===== CORE STATES =====
   const todayDate = new Date().toISOString().slice(0,10);
-  const [selectedDay, setSelectedDay] = useState(todayDate); // YYYY-MM-DD
-  const [selectedCase, setSelectedCase] = useState(null);
-  const [rxQuery, setRxQuery] = useState('');
-  const [rxResults, setRxResults] = useState([]);
-  const [rxItems, setRxItems] = useState([]); // {thuoc, soLuong}
-  const [medicineGroups, setMedicineGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState('');
-  const [rxPriceOrder, setRxPriceOrder] = useState(''); // '', 'asc', 'desc'
   const [todayPatients, setTodayPatients] = useState([]);
+  const [selectedCase, setSelectedCase] = useState(null);
   const [caseDetail, setCaseDetail] = useState(null);
+  
+  // ===== EXAMINATION STATES =====
   const [clinical, setClinical] = useState({ trieuChung: '', khamLamSang: '', huyetAp: '', nhipTim: '', nhietDo: '', canNang: '', chieuCao: '' });
+  
+  // ===== REFERRAL/LAB STATES =====
   const [labs, setLabs] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [prescriptions, setPrescriptions] = useState([]);
   const [serviceQuery, setServiceQuery] = useState('');
   const [serviceResults, setServiceResults] = useState([]);
   const [specialties, setSpecialties] = useState([]);
@@ -33,60 +25,25 @@ export default function DoctorDashboard() {
   const [servicesError, setServicesError] = useState('');
   const [loadingSpecialties, setLoadingSpecialties] = useState(false);
   const [specialtiesError, setSpecialtiesError] = useState('');
+  
+  // ===== RESULTS/HISTORY STATES =====
+  const [history, setHistory] = useState([]);
+  const [prescriptions, setPrescriptions] = useState([]);
+  
+  // ===== PRESCRIPTION STATES =====
+  const [rxQuery, setRxQuery] = useState('');
+  const [rxResults, setRxResults] = useState([]);
+  const [rxItems, setRxItems] = useState([]);
+  const [medicineGroups, setMedicineGroups] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState('');
+  const [rxPriceOrder, setRxPriceOrder] = useState('');
 
   const headers = useMemo(() => ({
     'Content-Type': 'application/json',
     Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`,
   }), []);
 
-  async function searchPatients(){
-    try{
-      const url = new URL(`${API_URL}/api/doctor/patients`);
-      if (patientQuery) url.searchParams.set('q', patientQuery);
-      url.searchParams.set('limit','10');
-      const res = await fetch(url, { headers });
-      const json = await res.json();
-      if(!res.ok) throw json;
-      setPatients(json.items || []);
-    }catch(e){ console.error(e); }
-  }
-
-  useEffect(()=>{ if(patientQuery.length>=1){ const t=setTimeout(searchPatients,300); return ()=>clearTimeout(t);} else { setPatients([]);} }, [patientQuery]);
-
-  async function createPatientQuick(){
-    try{
-      if(!newPatient.hoTen) return alert('Nhập họ tên');
-      const res = await fetch(`${API_URL}/api/doctor/patients`, { method:'POST', headers, body: JSON.stringify(newPatient) });
-      const json = await res.json();
-      if(!res.ok) throw json;
-      setSelectedPatient(json);
-      setNewPatient({ hoTen: '', soDienThoai: '' });
-      alert('Đã tạo bệnh nhân');
-    }catch(e){ alert(e?.message || 'Tạo bệnh nhân thất bại'); }
-  }
-      // Tải danh sách thuốc khi thay đổi từ khóa, nhóm hoặc sắp xếp giá
-      useEffect(()=>{ if(rxQuery.length>=1){ const t=setTimeout(searchMedicines,300); return ()=>clearTimeout(t);} else { searchMedicines(); } }, [rxQuery, selectedGroup, rxPriceOrder]);
-  async function loadCasesToday(){
-    setLoadingCases(true);
-    try{
-      const url = new URL(`${API_URL}/api/doctor/cases`);
-      // If selectedDay equals todayDate use 'today' shortcut (queue unaffected)
-      if(selectedDay === todayDate){
-        url.searchParams.set('date','today');
-      } else {
-        url.searchParams.set('date', selectedDay);
-      }
-      url.searchParams.set('limit','20');
-      const res = await fetch(url, { headers });
-      const json = await res.json();
-      if(!res.ok) throw json;
-      setCasesToday(json.items || []);
-    }catch(e){ console.error(e); }
-    finally{ setLoadingCases(false); }
-  }
-
-  useEffect(()=>{ loadCasesToday(); },[selectedDay]);
-
+  // ===== LOAD TODAY'S PATIENT QUEUE =====
   async function loadTodayPatients(){
     try{
       const res = await fetch(`${API_URL}/api/doctor/today/patients`, { headers });
@@ -96,8 +53,9 @@ export default function DoctorDashboard() {
     }catch(e){ console.error(e); }
   }
 
-  useEffect(()=>{ loadTodayPatients(); },[]);
+  useEffect(() => { loadTodayPatients(); }, []);
 
+  // ===== OPEN A CASE =====
   async function openCase(hsId){
     try{
       const res = await fetch(`${API_URL}/api/doctor/cases/${hsId}`, { headers });
@@ -113,59 +71,20 @@ export default function DoctorDashboard() {
       await loadLabs(json._id);
       await loadHistory(json.benhNhanId?._id);
       await loadPrescriptions(json._id);
+      setActiveTab('exam'); // Automatically go to examination
     }catch(e){ console.error(e); }
   }
 
-  async function loadLabs(hsId){
-    try{
-      const res = await fetch(`${API_URL}/api/doctor/cases/${hsId}/labs`, { headers });
-      const json = await res.json();
-      if(res.ok) setLabs(json); else console.error(json);
-    }catch(e){ console.error(e); }
-  }
-
-  async function loadHistory(benhNhanId){
-    try{
-      if(!benhNhanId) return setHistory([]);
-      const url = new URL(`${API_URL}/api/doctor/patients/${benhNhanId}/cases`);
-      url.searchParams.set('limit','5');
-      const res = await fetch(url, { headers });
-      const json = await res.json();
-      if(res.ok) setHistory(json.items || []);
-    }catch(e){ console.error(e); }
-  }
-
-  async function loadPrescriptions(hsId){
-    try{
-      const res = await fetch(`${API_URL}/api/doctor/cases/${hsId}/prescriptions`, { headers });
-      const json = await res.json();
-      if(res.ok) setPrescriptions(json || []); else console.error(json);
-    }catch(e){ console.error(e); }
-  }
-
-  async function completeVisit(){
-    try{
-      if(!selectedCase?._id) return;
-      const res = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/complete`, { method:'POST', headers });
-      const json = await res.json();
-      if(!res.ok) throw json;
-      alert('Đã kết thúc ca khám');
-      await Promise.all([loadCasesToday(), loadTodayPatients()]);
-    }catch(e){ alert(e?.message || 'Lỗi kết thúc ca'); }
-  }
-
+  // ===== QUEUE MANAGEMENT =====
   async function intake(lichKhamId){
     try{
       const res = await fetch(`${API_URL}/api/doctor/appointments/${lichKhamId}/intake`, { method:'POST', headers });
       const json = await res.json();
       if(!res.ok) throw json;
-      // Open / select returned case
       if(json.case){
-        setSelectedCase(json.case);
-        setCaseDetail(json.case);
-        setClinical({ trieuChung:'', khamLamSang:'', huyetAp:'', nhipTim:'', nhietDo:'', canNang:'', chieuCao:'' });
+        await openCase(json.case._id);
       }
-      await Promise.all([loadTodayPatients(), loadCasesToday()]);
+      await loadTodayPatients();
     }catch(e){ alert(e?.message || 'Tiếp nhận thất bại'); }
   }
 
@@ -193,14 +112,13 @@ export default function DoctorDashboard() {
       const json = await res.json();
       if(!res.ok) throw json;
       if(json.case){
-        setSelectedCase(json.case);
-        setCaseDetail(json.case);
-        setClinical({ trieuChung:'', khamLamSang:'', huyetAp:'', nhipTim:'', nhietDo:'', canNang:'', chieuCao:'' });
+        await openCase(json.case._id);
       }
-      await Promise.all([loadTodayPatients(), loadCasesToday()]);
+      await loadTodayPatients();
     }catch(e){ alert(e?.message || 'Không thể gọi tiếp theo'); }
   }
 
+  // ===== EXAMINATION (CLINICAL) =====
   async function saveClinical(){
     try{
       if(!selectedCase?._id) return;
@@ -217,14 +135,13 @@ export default function DoctorDashboard() {
     }catch(e){ alert(e?.message||'Lỗi lưu'); }
   }
 
-  async function orderLab(loai){
-    // legacy kept for quick buttons if needed
+  // ===== LAB/SERVICE REFERRAL =====
+  async function loadLabs(hsId){
     try{
-      if(!selectedCase?._id) return;
-      const res = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/labs`, { method:'POST', headers, body: JSON.stringify({ loaiChiDinh: loai, dichVuId: serviceResults[0]?._id }) });
+      const res = await fetch(`${API_URL}/api/doctor/cases/${hsId}/labs`, { headers });
       const json = await res.json();
-      if(res.ok){ await loadLabs(selectedCase._id); } else { alert(json?.message||'Lỗi'); }
-    }catch(e){ alert('Lỗi chỉ định'); }
+      if(res.ok) setLabs(json); else console.error(json);
+    }catch(e){ console.error(e); }
   }
 
   async function searchServices(){
@@ -240,12 +157,11 @@ export default function DoctorDashboard() {
     finally{ setLoadingServices(false); }
   }
 
-  // Service query effect: only clear results when no specialty selected
   useEffect(()=>{
     if(serviceQuery.length>0){
       const t=setTimeout(searchServices,300); return ()=>clearTimeout(t);
     } else {
-      if(!selectedSpecialty) setServiceResults([]); // keep results if filtering by specialty with empty query
+      if(!selectedSpecialty) setServiceResults([]);
     }
   }, [serviceQuery, selectedSpecialty]);
   useEffect(()=>{ if(selectedSpecialty) searchServices(); }, [selectedSpecialty]);
@@ -272,29 +188,52 @@ export default function DoctorDashboard() {
       if(!res.ok) throw json;
       setServiceQuery(''); setServiceResults([]);
       await loadLabs(selectedCase._id);
+      alert('Đã tạo chỉ định');
     }catch(e){ alert(e?.message || 'Lỗi chỉ định'); }
   }
 
-  async function createCase(){
+  async function deleteService(labId){
+    if(!confirm('Xóa chỉ định này?')) return;
     try{
-      if(!selectedPatient?._id) return alert('Chọn bệnh nhân');
-      const payload = { benhNhanId: selectedPatient._id, chanDoan: caseForm.chanDoan, huongDieuTri: caseForm.huongDieuTri };
-      const res = await fetch(`${API_URL}/api/doctor/cases`, { method:'POST', headers, body: JSON.stringify(payload) });
+      const res = await fetch(`${API_URL}/api/doctor/labs/${labId}`, { method:'DELETE', headers });
       const json = await res.json();
-      if(!res.ok) throw json;
-      setCaseForm({ chanDoan: '', huongDieuTri: 'ngoai_tru' });
-      setSelectedPatient(null);
-      await loadCasesToday();
-      alert('Đã tạo hồ sơ khám');
-    }catch(e){ alert(e?.message || 'Tạo hồ sơ khám thất bại'); }
+      if(res.ok){ setLabs(json.items || []); }
+    }catch(err){ console.error(err); }
   }
 
+  async function updateLabNote(labId, ghiChu){
+    try{
+      const res = await fetch(`${API_URL}/api/doctor/labs/${labId}/note`, { method:'PUT', headers, body: JSON.stringify({ ghiChu }) });
+      if(res.ok){ const updated = await res.json(); setLabs(ls=> ls.map(x=> x._id===updated._id? updated : x)); }
+    }catch(err){ console.error(err); }
+  }
+
+  // ===== RESULTS & HISTORY =====
+  async function loadHistory(benhNhanId){
+    try{
+      if(!benhNhanId) return setHistory([]);
+      const url = new URL(`${API_URL}/api/doctor/patients/${benhNhanId}/cases`);
+      url.searchParams.set('limit','5');
+      const res = await fetch(url, { headers });
+      const json = await res.json();
+      if(res.ok) setHistory(json.items || []);
+    }catch(e){ console.error(e); }
+  }
+
+  async function loadPrescriptions(hsId){
+    try{
+      const res = await fetch(`${API_URL}/api/doctor/cases/${hsId}/prescriptions`, { headers });
+      const json = await res.json();
+      if(res.ok) setPrescriptions(json || []); else console.error(json);
+    }catch(e){ console.error(e); }
+  }
+
+  // ===== PRESCRIPTION =====
   async function searchMedicines(){
     try{
       const url = new URL(`${API_URL}/api/doctor/medicines`);
       if (rxQuery) url.searchParams.set('q', rxQuery);
       url.searchParams.set('limit','8');
-      // selectedGroup '' means ALL; 'NONE' means ungrouped medicines
       if (selectedGroup) {
         url.searchParams.set('group', selectedGroup);
       } else {
@@ -317,7 +256,6 @@ export default function DoctorDashboard() {
   }
   useEffect(()=>{ loadMedicineGroups(); },[]);
 
-  // Load medicines also when no query (initial list) or group changes
   useEffect(()=>{
     const delay = setTimeout(searchMedicines, rxQuery ? 300 : 0);
     return ()=>clearTimeout(delay);
@@ -326,7 +264,7 @@ export default function DoctorDashboard() {
   function addMedicine(m){
     if(!m) return;
     setRxItems(items => {
-      if(items.some(x => x.thuoc._id === m._id)) return items; // avoid dup
+      if(items.some(x => x.thuoc._id === m._id)) return items;
       return [...items, { thuoc: m, soLuong: 1 }];
     });
   }
@@ -355,91 +293,186 @@ export default function DoctorDashboard() {
       const json = await res.json();
       if(!res.ok) throw json;
       setRxItems([]); setRxResults([]); setRxQuery('');
-      alert('Đã kê đơn');
+      alert('Đã kê đơn - Bệnh nhân chuyển sang chờ lấy thuốc (WAITING_FOR_MEDICINE)');
       await loadPrescriptions(selectedCase._id);
+      await loadTodayPatients();
     }catch(e){ alert(e?.message || 'Kê đơn thất bại'); }
   }
 
+  async function completeVisit(){
+    try{
+      if(!selectedCase?._id) return;
+      const res = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/complete`, { method:'POST', headers });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      alert('Đã kết thúc ca khám');
+      setSelectedCase(null);
+      setCaseDetail(null);
+      setLabs([]);
+      setHistory([]);
+      setPrescriptions([]);
+      setRxItems([]);
+      setActiveTab('call');
+      await loadTodayPatients();
+    }catch(e){ alert(e?.message || 'Lỗi kết thúc ca'); }
+  }
+
+  // ===== HELPER FUNCTIONS =====
+  function getCaseStatus(){
+    if(!caseDetail) return 'N/A';
+    const statuses = {
+      'dang_kham': '🔴 Đang khám',
+      'cho_chi_dinh': '🟡 Chờ chỉ định',
+      'cho_ket_qua': '🟠 Chờ kết quả',
+      'da_co_ket_qua': '✓ Đã có kết quả',
+      'cho_ke_don': '💊 Chờ kê đơn',
+      'WAITING_FOR_MEDICINE': '⏳ Chờ lấy thuốc',
+      'hoan_tat': '✅ Hoàn tất'
+    };
+    return statuses[caseDetail.trangThai] || caseDetail.trangThai || 'N/A';
+  }
+
   return (
-    <div className="container py-2">
-      <div className="hc-card">
-        <div className="hc-card-header d-flex justify-content-between align-items-center">
-          <span>Hồ sơ khám {selectedDay === todayDate ? 'hôm nay' : new Date(selectedDay+'T00:00:00').toLocaleDateString()}</span>
-          <div className="d-flex align-items-center gap-2">
-            <input type="date" className="form-control form-control-sm" style={{width:'150px'}} max={todayDate} value={selectedDay} onChange={e=>setSelectedDay(e.target.value)} />
-            <div className="btn-group btn-group-sm" role="group">
-              <button type="button" className="btn btn-outline-secondary" onClick={()=>{
-                const d = new Date(selectedDay+'T00:00:00'); d.setDate(d.getDate()-1); setSelectedDay(d.toISOString().slice(0,10));
-              }}>{'<'}
+    <div className="py-3">
+      {/* ===== TAB NAVIGATION ===== */}
+      <div className="container-fluid mb-3">
+        <div className="card shadow-sm border-0">
+          <div className="card-body p-0">
+            <nav className="nav nav-tabs border-bottom-0" role="tablist">
+              <button 
+                className={`nav-link fw-semibold ${activeTab === 'call' ? 'active border-bottom border-3 border-primary text-primary' : 'text-muted'}`}
+                onClick={() => setActiveTab('call')}
+                role="tab"
+              >
+                <i className="bi bi-telephone-fill me-2"></i>Gọi bệnh nhân
               </button>
-              <button type="button" className="btn btn-outline-secondary" disabled={selectedDay===todayDate} onClick={()=>{
-                const d = new Date(selectedDay+'T00:00:00'); d.setDate(d.getDate()+1); const next = d.toISOString().slice(0,10); if(next<=todayDate) setSelectedDay(next);
-              }}>{'>'}
+              <button 
+                className={`nav-link fw-semibold ${activeTab === 'exam' ? 'active border-bottom border-3 border-primary text-primary' : !selectedCase ? 'disabled text-muted' : 'text-muted'}`}
+                onClick={() => selectedCase && setActiveTab('exam')}
+                role="tab"
+                disabled={!selectedCase}
+              >
+                <i className="bi bi-stethoscope me-2"></i>Khám
               </button>
-              <button type="button" className="btn btn-outline-primary" disabled={selectedDay===todayDate} onClick={()=>setSelectedDay(todayDate)}>Hôm nay</button>
-            </div>
-          </div>
-        </div>
-        <div className="card-body">
-              {loadingCases ? (
-                <div>Đang tải...</div>
-              ) : casesToday.length===0 ? (
-                <div className="text-muted">Không có hồ sơ cho ngày này</div>
-              ) : (
-                <div className="list-group">
-                  {casesToday.map(hs => (
-                    <button type="button" key={hs._id} className={`list-group-item list-group-item-action ${selectedCase?._id===hs._id?'active':''}`} onClick={()=>openCase(hs._id)}>
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div>
-                          <div className="fw-semibold">{hs.benhNhanId?.hoTen}</div>
-                          <div className="small opacity-75">{new Date(hs.createdAt).toLocaleTimeString()} • {hs.chanDoan || 'Chưa ghi'}</div>
-                        </div>
-                        <span className="badge text-bg-light">{hs.huongDieuTri || 'N/A'}</span>
-                      </div>
-                    </button>
-                  ))}
+              <button 
+                className={`nav-link fw-semibold ${activeTab === 'referral' ? 'active border-bottom border-3 border-primary text-primary' : !selectedCase ? 'disabled text-muted' : 'text-muted'}`}
+                onClick={() => selectedCase && setActiveTab('referral')}
+                role="tab"
+                disabled={!selectedCase}
+              >
+                <i className="bi bi-clipboard-check me-2"></i>Chỉ định
+              </button>
+              <button 
+                className={`nav-link fw-semibold ${activeTab === 'results' ? 'active border-bottom border-3 border-primary text-primary' : !selectedCase ? 'disabled text-muted' : 'text-muted'}`}
+                onClick={() => selectedCase && setActiveTab('results')}
+                role="tab"
+                disabled={!selectedCase}
+              >
+                <i className="bi bi-file-earmark-text me-2"></i>Kết quả
+              </button>
+              <button 
+                className={`nav-link fw-semibold ${activeTab === 'prescription' ? 'active border-bottom border-3 border-primary text-primary' : !selectedCase ? 'disabled text-muted' : 'text-muted'}`}
+                onClick={() => selectedCase && setActiveTab('prescription')}
+                role="tab"
+                disabled={!selectedCase}
+              >
+                <i className="bi bi-capsule me-2"></i>Kê đơn
+              </button>
+              {selectedCase && (
+                <div className="ms-auto d-flex align-items-center gap-2 pe-3">
+                  <small className="text-muted">Trạng thái:</small>
+                  <small className="fw-semibold text-success">{getCaseStatus()}</small>
+                  <button 
+                    className="btn btn-sm btn-outline-danger"
+                    onClick={completeVisit}
+                    title="Kết thúc ca khám"
+                  >
+                    <i className="bi bi-check-circle me-1"></i>Kết thúc
+                  </button>
                 </div>
               )}
+            </nav>
+          </div>
         </div>
       </div>
 
-      <div className="hc-card">
-        <div className="hc-card-header d-flex justify-content-between align-items-center">
-          <span>Hàng đợi hôm nay</span>
-          <button className="btn btn-sm btn-outline-primary" onClick={callNext}><i className="bi bi-chevron-double-right"/> Gọi tiếp</button>
-        </div>
-        <div className="card-body">
-              {todayPatients.length===0 ? (
-                <div className="text-muted">Chưa có lịch hẹn</div>
+      {/* ===== TAB CONTENT ===== */}
+      <div className="container-fluid">
+        {/* CALL PATIENT TAB */}
+        {activeTab === 'call' && (
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-light border-0 d-flex justify-content-between align-items-center">
+              <h5 className="mb-0">
+                <i className="bi bi-calendar-check text-primary me-2"></i>Hàng đợi hôm nay
+              </h5>
+              <button className="btn btn-sm btn-primary" onClick={callNext}>
+                <i className="bi bi-play-fill me-1"></i>Gọi tiếp
+              </button>
+            </div>
+            <div className="card-body p-0">
+              {todayPatients.length === 0 ? (
+                <div className="text-center text-muted py-5">
+                  <i className="bi bi-inbox fs-1 d-block mb-2"></i>
+                  <p>Chưa có lịch hẹn cho hôm nay</p>
+                </div>
               ) : (
                 <div className="table-responsive">
-                  <table className="table table-sm align-middle">
-                    <thead>
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="table-light">
                       <tr>
-                        <th style={{width:60}}>STT</th>
-                        <th>Bệnh nhân</th>
-                        <th style={{width:90}}>Năm sinh</th>
+                        <th style={{width:60}}><i className="bi bi-hash"></i> STT</th>
+                        <th><i className="bi bi-person"></i> Tên bệnh nhân</th>
+                        <th style={{width:100}}>Năm sinh</th>
                         <th style={{width:120}}>Trạng thái</th>
-                        <th className="text-end" style={{width:140}}>Hành động</th>
+                        <th className="text-end" style={{width:160}}>Hành động</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {todayPatients.map((it, idx)=> {
+                      {todayPatients.map((it, idx) => {
                         const year = it.benhNhan?.ngaySinh ? new Date(it.benhNhan.ngaySinh).getFullYear() : '';
                         let stLabel = 'Chờ khám';
-                        if(selectedCase && caseDetail?.benhNhanId?._id === it.benhNhan?._id) stLabel = 'Đang khám';
+                        let stBadge = 'bg-warning';
+                        if(selectedCase && caseDetail?.benhNhanId?._id === it.benhNhan?._id) {
+                          stLabel = 'Đang khám';
+                          stBadge = 'bg-success';
+                        }
                         const disabled = !it.soThuTu;
                         return (
-                          <tr key={idx}>
-                            <td>{it.soThuTu || '-'}</td>
-                            <td>{it.benhNhan?.hoTen}</td>
-                            <td>{year}</td>
-                            <td>{stLabel}</td>
+                          <tr key={idx} className={selectedCase?.benhNhanId?._id === it.benhNhan?._id ? 'table-active' : ''}>
+                            <td>
+                              <span className="badge bg-primary fs-6">{it.soThuTu || '-'}</span>
+                            </td>
+                            <td className="fw-semibold">{it.benhNhan?.hoTen}</td>
+                            <td className="text-muted">{year}</td>
+                            <td>
+                              <span className={`badge ${stBadge}`}>{stLabel}</span>
+                            </td>
                             <td className="text-end">
                               <div className="btn-group btn-group-sm" role="group">
-                                <button disabled={disabled} className="btn btn-outline-primary" title="Gọi / Tiếp nhận" onClick={()=>intake(it._id)}><i className="bi bi-telephone"/></button>
-                                <button disabled={disabled} className="btn btn-outline-secondary" title="Thông báo" onClick={()=>notify(it._id)}><i className="bi bi-bell"/></button>
-                                <button disabled={disabled} className="btn btn-outline-danger" title="Bỏ qua" onClick={()=>skip(it._id)}><i className="bi bi-skip-forward"/></button>
+                                <button 
+                                  disabled={disabled} 
+                                  className="btn btn-outline-success" 
+                                  title="Tiếp nhận bệnh nhân" 
+                                  onClick={() => intake(it._id)}
+                                >
+                                  <i className="bi bi-check2"></i>
+                                </button>
+                                <button 
+                                  disabled={disabled} 
+                                  className="btn btn-outline-info" 
+                                  title="Thông báo bệnh nhân" 
+                                  onClick={() => notify(it._id)}
+                                >
+                                  <i className="bi bi-bell"></i>
+                                </button>
+                                <button 
+                                  disabled={disabled} 
+                                  className="btn btn-outline-warning" 
+                                  title="Bỏ qua lịch hẹn" 
+                                  onClick={() => skip(it._id)}
+                                >
+                                  <i className="bi bi-skip-forward"></i>
+                                </button>
                               </div>
                             </td>
                           </tr>
@@ -449,256 +482,595 @@ export default function DoctorDashboard() {
                   </table>
                 </div>
               )}
-        </div>
-      </div>
+            </div>
+          </div>
+        )}
 
-      {selectedCase && (
-        <div className="hc-card hc-card--wide">
-          <div className="hc-card-header">Khám cho: {caseDetail?.benhNhanId?.hoTen || selectedCase.benhNhanId?.hoTen}</div>
-          <div className="card-body">
-                <div className="mb-3">
-                  <div className="fw-semibold mb-2">Thông tin lâm sàng</div>
+        {/* EXAMINATION TAB */}
+        {activeTab === 'exam' && selectedCase && (
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-light border-0">
+              <div className="d-flex justify-content-between align-items-center">
+                <div>
+                  <h5 className="mb-1">
+                    <i className="bi bi-clipboard2-pulse text-primary me-2"></i>Khám bệnh nhân
+                  </h5>
+                  <p className="mb-0 text-muted small">
+                    <strong>{caseDetail?.benhNhanId?.hoTen}</strong> • 
+                    <span className="badge bg-info ms-2">{getCaseStatus()}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="row g-3">
+                <div className="col-12">
+                  <label className="form-label fw-semibold">
+                    <i className="bi bi-chat-left-dots text-primary me-2"></i>Triệu chứng
+                  </label>
+                  <textarea 
+                    className="form-control" 
+                    rows="3"
+                    placeholder="Ghi nhập triệu chứng bệnh nhân..."
+                    value={clinical.trieuChung}
+                    onChange={e => setClinical(s => ({...s, trieuChung: e.target.value}))}
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label fw-semibold">
+                    <i className="bi bi-heart-pulse text-danger me-2"></i>Khám lâm sàng
+                  </label>
+                  <textarea 
+                    className="form-control" 
+                    rows="3"
+                    placeholder="Ghi nhập kết quả khám lâm sàng..."
+                    value={clinical.khamLamSang}
+                    onChange={e => setClinical(s => ({...s, khamLamSang: e.target.value}))}
+                  />
+                </div>
+                <div className="col-12">
+                  <label className="form-label fw-semibold d-block">
+                    <i className="bi bi-graph-up text-success me-2"></i>Sinh hiệu
+                  </label>
                   <div className="row g-2">
-                    <div className="col-12"><textarea className="form-control" placeholder="Triệu chứng" value={clinical.trieuChung} onChange={e=>setClinical(s=>({...s, trieuChung:e.target.value}))}/></div>
-                    <div className="col-12"><textarea className="form-control" placeholder="Khám lâm sàng" value={clinical.khamLamSang} onChange={e=>setClinical(s=>({...s, khamLamSang:e.target.value}))}/></div>
-                    <div className="col-6"><input className="form-control" placeholder="Huyết áp" value={clinical.huyetAp} onChange={e=>setClinical(s=>({...s, huyetAp:e.target.value}))}/></div>
-                    <div className="col-6"><input className="form-control" type="number" placeholder="Nhịp tim" value={clinical.nhipTim} onChange={e=>setClinical(s=>({...s, nhipTim:e.target.value}))}/></div>
-                    <div className="col-6"><input className="form-control" type="number" step="0.1" placeholder="Nhiệt độ (°C)" value={clinical.nhietDo} onChange={e=>setClinical(s=>({...s, nhietDo:e.target.value}))}/></div>
-                    <div className="col-3"><input className="form-control" type="number" step="0.1" placeholder="Cân nặng (kg)" value={clinical.canNang} onChange={e=>setClinical(s=>({...s, canNang:e.target.value}))}/></div>
-                    <div className="col-3"><input className="form-control" type="number" step="0.1" placeholder="Chiều cao (cm)" value={clinical.chieuCao} onChange={e=>setClinical(s=>({...s, chieuCao:e.target.value}))}/></div>
+                    <div className="col-md-3">
+                      <label className="form-label small text-muted">Huyết áp</label>
+                      <input 
+                        className="form-control" 
+                        placeholder="VD: 120/80"
+                        value={clinical.huyetAp}
+                        onChange={e => setClinical(s => ({...s, huyetAp: e.target.value}))}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small text-muted">Nhịp tim (lần/phút)</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        placeholder="VD: 72"
+                        value={clinical.nhipTim}
+                        onChange={e => setClinical(s => ({...s, nhipTim: e.target.value}))}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small text-muted">Nhiệt độ (°C)</label>
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        className="form-control" 
+                        placeholder="VD: 36.5"
+                        value={clinical.nhietDo}
+                        onChange={e => setClinical(s => ({...s, nhietDo: e.target.value}))}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small text-muted">Cân nặng (kg)</label>
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        className="form-control" 
+                        placeholder="VD: 70"
+                        value={clinical.canNang}
+                        onChange={e => setClinical(s => ({...s, canNang: e.target.value}))}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label small text-muted">Chiều cao (cm)</label>
+                      <input 
+                        type="number" 
+                        step="0.1"
+                        className="form-control" 
+                        placeholder="VD: 175"
+                        value={clinical.chieuCao}
+                        onChange={e => setClinical(s => ({...s, chieuCao: e.target.value}))}
+                      />
+                    </div>
                   </div>
-                  <div className="d-flex justify-content-end mt-2 gap-2">
-                    <button className="btn btn-outline-primary btn-sm" onClick={saveClinical}><i className="bi bi-save"/> Lưu lâm sàng</button>
-                    <button className="btn btn-outline-success btn-sm" onClick={completeVisit}><i className="bi bi-check2-circle"/> Kết thúc ca</button>
+                </div>
+              </div>
+              <div className="d-flex justify-content-end gap-2 mt-4">
+                <button className="btn btn-outline-secondary" onClick={() => setActiveTab('call')}>
+                  <i className="bi bi-arrow-left me-1"></i>Quay lại
+                </button>
+                <button className="btn btn-primary" onClick={saveClinical}>
+                  <i className="bi bi-save me-1"></i>Lưu thông tin
+                </button>
+                <button className="btn btn-outline-success ms-2" onClick={() => setActiveTab('referral')}>
+                  <i className="bi bi-arrow-right me-1"></i>Tạo chỉ định
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* REFERRAL TAB */}
+        {activeTab === 'referral' && selectedCase && (
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-light border-0">
+              <div className="d-flex justify-content-between align-items-center">
+                <h5 className="mb-0">
+                  <i className="bi bi-prescription2 text-primary me-2"></i>Tạo chỉ định cận lâm sàng
+                </h5>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="mb-4">
+                <label className="form-label fw-semibold">
+                  <i className="bi bi-search me-2"></i>Tìm dịch vụ
+                </label>
+                <div className="row g-2 mb-3">
+                  <div className="col-md-4">
+                    <select 
+                      className="form-select"
+                      value={selectedSpecialty}
+                      onChange={e => setSelectedSpecialty(e.target.value)}
+                    >
+                      <option value="">-- Chọn chuyên khoa --</option>
+                      {specialties.map(sp => (
+                        <option key={sp._id} value={sp._id}>{sp.ten}</option>
+                      ))}
+                    </select>
+                    {loadingSpecialties && <small className="text-muted">Đang tải...</small>}
+                    {specialtiesError && <small className="text-danger">{specialtiesError}</small>}
+                  </div>
+                  <div className="col-md-8">
+                    <input 
+                      type="text"
+                      className="form-control"
+                      placeholder="Tìm tên dịch vụ..."
+                      value={serviceQuery}
+                      onChange={e => setServiceQuery(e.target.value)}
+                    />
+                    {loadingServices && <small className="text-muted">Đang tìm kiếm...</small>}
+                    {servicesError && <small className="text-danger">{servicesError}</small>}
                   </div>
                 </div>
 
-                <hr/>
-                <div className="mb-3">
-                  <div className="fw-semibold mb-2">Chỉ định cận lâm sàng (dịch vụ)</div>
-                  <div className="row g-2 mb-2">
-                    <div className="col-md-5">
-                      <select className="form-select" value={selectedSpecialty} onChange={e=>setSelectedSpecialty(e.target.value)}>
-                        <option value="">-- Chọn chuyên khoa --</option>
-                        {specialties.map(sp => <option key={sp._id} value={sp._id}>{sp.ten}</option>)}
-                      </select>
-                      {loadingSpecialties && <small className="text-muted">Đang tải chuyên khoa...</small>}
-                      {specialtiesError && <small className="text-danger">{specialtiesError}</small>}
-                    </div>
-                    <div className="col-md-7">
-                      <input className="form-control" placeholder="Tìm dịch vụ..." value={serviceQuery} onChange={e=>setServiceQuery(e.target.value)} />
-                      {loadingServices && <small className="text-muted">Đang tìm dịch vụ...</small>}
-                      {servicesError && <small className="text-danger">{servicesError}</small>}
-                    </div>
-                  </div>
-                  {serviceResults.length>0 && (
-                    <div className="list-group mb-2">
+                {serviceResults.length > 0 && (
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">Kết quả tìm kiếm</label>
+                    <div className="list-group list-group-sm">
                       {serviceResults.map(svc => (
-                        <button type="button" key={svc._id} className="list-group-item list-group-item-action" onClick={()=>orderService(svc)}>
-                          <div className="d-flex justify-content-between">
-                            <span>{svc.ten}</span>
-                            <small className="text-muted">{Number.isFinite(svc.gia)? svc.gia.toLocaleString()+'₫':''}</small>
+                        <button
+                          type="button"
+                          key={svc._id}
+                          className="list-group-item list-group-item-action"
+                          onClick={() => orderService(svc)}
+                        >
+                          <div className="d-flex justify-content-between align-items-center">
+                            <div>
+                              <div className="fw-semibold">{svc.ten}</div>
+                              <small className="text-muted">{svc.chuyenKhoaId?.ten || ''}</small>
+                            </div>
+                            <span className="badge bg-light text-dark">
+                              {Number.isFinite(svc.gia) ? svc.gia.toLocaleString() + '₫' : ''}
+                            </span>
                           </div>
                         </button>
                       ))}
                     </div>
-                  )}
-                  {labs.length>0 && (
-                    <ul className="list-group">
-                      {labs.map(l => (
-                        <li key={l._id} className="list-group-item d-flex justify-content-between align-items-center">
-                          <div className="d-flex flex-column">
-                            <span>{l.dichVuId?.ten || l.loaiChiDinh}</span>
-                            {l.dichVuId?.chuyenKhoaId?.ten && <small className="text-muted">{l.dichVuId.chuyenKhoaId.ten}</small>}
-                            <div className="mt-1">
+                  </div>
+                )}
+              </div>
+
+              {labs.length > 0 && (
+                <div>
+                  <label className="form-label fw-semibold">
+                    <i className="bi bi-list-check text-success me-2"></i>Danh sách chỉ định
+                  </label>
+                  <div className="list-group list-group-sm">
+                    {labs.map(l => (
+                      <div key={l._id} className="list-group-item p-3 border-start border-3 border-primary">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="flex-grow-1">
+                            <div className="fw-semibold">{l.dichVuId?.ten || l.loaiChiDinh}</div>
+                            <small className="text-muted d-block">{l.dichVuId?.chuyenKhoaId?.ten}</small>
+                            <div className="mt-2">
                               <input
+                                type="text"
                                 className="form-control form-control-sm"
                                 placeholder="Ghi chú..."
                                 defaultValue={l.ghiChu || ''}
-                                onBlur={async (e)=>{
-                                  const val = e.target.value;
-                                  if(val !== (l.ghiChu||'')){
-                                    try{
-                                      const res = await fetch(`${API_URL}/api/doctor/labs/${l._id}/note`, { method:'PUT', headers, body: JSON.stringify({ ghiChu: val }) });
-                                      if(res.ok){ const updated = await res.json(); setLabs(ls=> ls.map(x=> x._id===updated._id? updated : x)); }
-                                    }catch(err){ console.error(err); }
-                                  }
-                                }}
-                                disabled={l.trangThai==='da_xong'}
+                                onBlur={e => updateLabNote(l._id, e.target.value)}
+                                disabled={l.trangThai === 'da_xong'}
                               />
                             </div>
                           </div>
-                          <div className="d-flex flex-column align-items-end">
-                            {Number.isFinite(l.dichVuId?.gia) && <small className="text-muted">{l.dichVuId.gia.toLocaleString()}₫</small>}
-                            <span className="badge text-bg-light">{l.ketQua? 'Đã có kết quả':'Đang chờ'}</span>
-                            {l.trangThai==='cho_thuc_hien' && (
-                              <button className="btn btn-sm btn-outline-danger mt-1" onClick={async ()=> {
-                                if(!confirm('Xóa chỉ định này?')) return;
-                                try{
-                                  const res = await fetch(`${API_URL}/api/doctor/labs/${l._id}`, { method:'DELETE', headers });
-                                  const json = await res.json();
-                                  if(res.ok){ setLabs(json.items || []); }
-                                }catch(err){ console.error(err); }
-                              }}>Xóa</button>
+                          <div className="text-end ms-3">
+                            <div className="small text-muted mb-1">
+                              {Number.isFinite(l.dichVuId?.gia) ? l.dichVuId.gia.toLocaleString() + '₫' : ''}
+                            </div>
+                            <span className={`badge ${l.ketQua ? 'bg-success' : 'bg-warning'}`}>
+                              {l.ketQua ? 'Có kết quả' : 'Chờ thực hiện'}
+                            </span>
+                            {l.trangThai === 'cho_thuc_hien' && (
+                              <button
+                                className="btn btn-outline-danger btn-sm d-block mt-2"
+                                onClick={() => deleteService(l._id)}
+                              >
+                                <i className="bi bi-trash me-1"></i>Xóa
+                              </button>
                             )}
                           </div>
-                        </li>
-                      ))}
-                      <li className="list-group-item d-flex justify-content-between fw-semibold">
-                        <span>Tổng chi phí</span>
-                        <span>{labs.reduce((sum, it)=> sum + (Number.isFinite(it?.dichVuId?.gia)? it.dichVuId.gia : 0), 0).toLocaleString()}₫</span>
-                      </li>
-                    </ul>
-                  )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="list-group-item list-group-item-light fw-semibold d-flex justify-content-between p-3">
+                    <span>Tổng chi phí</span>
+                    <span className="text-primary">
+                      {labs.reduce((sum, it) => sum + (Number.isFinite(it?.dichVuId?.gia) ? it.dichVuId.gia : 0), 0).toLocaleString()}₫
+                    </span>
+                  </div>
                 </div>
+              )}
 
-                <hr/>
-                {history.length>0 && (
-                  <div className="mb-3">
-                    <div className="fw-semibold mb-2">Lịch sử khám gần đây</div>
-                    <ul className="list-group">
-                      {history.map(h => (
-                        <li key={h._id} className="list-group-item d-flex justify-content-between align-items-center">
-                          <span>{new Date(h.createdAt).toLocaleDateString()} • {h.chanDoan || 'Chưa ghi'}</span>
-                          <span className="badge text-bg-light">{h.trangThai || ''}</span>
-                        </li>
+              <div className="d-flex justify-content-end gap-2 mt-4">
+                <button className="btn btn-outline-secondary" onClick={() => setActiveTab('exam')}>
+                  <i className="bi bi-arrow-left me-1"></i>Quay lại
+                </button>
+                {labs.length > 0 && (
+                  <button className="btn btn-outline-primary" onClick={() => setActiveTab('results')}>
+                    <i className="bi bi-arrow-right me-1"></i>Xem kết quả
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* RESULTS TAB */}
+        {activeTab === 'results' && selectedCase && (
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-light border-0">
+              <h5 className="mb-0">
+                <i className="bi bi-file-text text-primary me-2"></i>Kết quả & Lịch sử khám
+              </h5>
+            </div>
+            <div className="card-body">
+              {labs.length > 0 && (
+                <div className="mb-4">
+                  <h6 className="fw-semibold mb-3">Kết quả hiện tại</h6>
+                  <div className="list-group list-group-sm">
+                    {labs.map(l => (
+                      <div key={l._id} className="list-group-item p-3 border-start border-3 border-success">
+                        <div className="d-flex justify-content-between align-items-start">
+                          <div className="flex-grow-1">
+                            <div className="fw-semibold">{l.dichVuId?.ten || l.loaiChiDinh}</div>
+                            <small className="text-muted d-block">{l.dichVuId?.chuyenKhoaId?.ten}</small>
+                            {l.ketQua && (
+                              <div className="mt-2 p-2 bg-light rounded">
+                                <p className="small mb-1">
+                                  <strong>📋 Kết quả:</strong> {l.ketQua}
+                                </p>
+                                {l.ghiChu && (
+                                  <p className="small text-muted mb-0">
+                                    <strong>📝 Ghi chú:</strong> {l.ghiChu}
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          <span className={`badge ${l.ketQua ? 'bg-success' : 'bg-warning'}`}>
+                            {l.ketQua ? '✓ Có kết quả' : '⏳ Chờ kết quả'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {history.length > 0 && (
+                <div>
+                  <h6 className="fw-semibold mb-3">Lịch sử khám gần đây</h6>
+                  <div className="list-group list-group-sm">
+                    {history.map(h => (
+                      <div key={h._id} className="list-group-item p-3">
+                        <div className="d-flex justify-content-between align-items-center">
+                          <div>
+                            <div className="small text-muted">{new Date(h.createdAt).toLocaleDateString()}</div>
+                            <div className="fw-semibold">{h.chanDoan || 'Chưa ghi'}</div>
+                          </div>
+                          <span className="badge bg-light text-dark">{h.trangThai}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {labs.length === 0 && history.length === 0 && (
+                <div className="text-center text-muted py-5">
+                  <i className="bi bi-inbox fs-1 d-block mb-2"></i>
+                  <p>Chưa có kết quả nào</p>
+                </div>
+              )}
+
+              <div className="d-flex justify-content-end gap-2 mt-4">
+                <button className="btn btn-outline-secondary" onClick={() => setActiveTab('referral')}>
+                  <i className="bi bi-arrow-left me-1"></i>Quay lại
+                </button>
+                <button className="btn btn-outline-primary" onClick={() => setActiveTab('prescription')}>
+                  <i className="bi bi-arrow-right me-1"></i>Kê đơn
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* PRESCRIPTION TAB */}
+        {activeTab === 'prescription' && selectedCase && (
+          <div className="card shadow-sm border-0">
+            <div className="card-header bg-light border-0">
+              <h5 className="mb-0">
+                <i className="bi bi-capsule text-primary me-2"></i>Kê đơn thuốc → Chờ lấy thuốc (WAITING_FOR_MEDICINE)
+              </h5>
+            </div>
+            <div className="card-body">
+              {/* Medicine Search & Groups */}
+              <div className="mb-4">
+                <label className="form-label fw-semibold">
+                  <i className="bi bi-search me-2"></i>Tìm thuốc
+                </label>
+                
+                {medicineGroups.length > 0 && (
+                  <div className="mb-3 p-2 bg-light rounded">
+                    <small className="text-muted d-block mb-2 fw-semibold">Nhóm thuốc</small>
+                    <div className="d-flex flex-wrap gap-1">
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${selectedGroup === '' ? 'btn-primary' : 'btn-outline-primary'}`}
+                        onClick={() => setSelectedGroup('')}
+                      >
+                        Tất cả
+                      </button>
+                      {medicineGroups.map(g => (
+                        <button
+                          type="button"
+                          key={g.value || 'NONE'}
+                          className={`btn btn-sm ${selectedGroup === g.value ? 'btn-primary' : 'btn-outline-primary'}`}
+                          onClick={() => setSelectedGroup(g.value)}
+                        >
+                          {g.name} <span className="badge bg-light text-dark ms-1">{g.count}</span>
+                        </button>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
 
-                {/* Kê đơn thuốc */}
-                <hr/>
-                <div className="mb-3">
-                  <div className="fw-semibold mb-2">Kê đơn thuốc</div>
-                  {medicineGroups.length>0 && (
-                    <div className="mb-2">
-                      <div className="small text-muted mb-1">Nhóm thuốc</div>
-                      <div className="d-flex flex-wrap gap-1">
-                        <button type="button" className={`btn btn-sm ${selectedGroup===''?'btn-primary':'btn-outline-primary'}`} onClick={()=>setSelectedGroup('')}>Tất cả</button>
-                        {medicineGroups.map(g => (
-                          <button
-                            type="button"
-                            key={g.value||'NONE'}
-                            className={`btn btn-sm ${selectedGroup===g.value?'btn-primary':'btn-outline-primary'}`}
-                            onClick={()=>setSelectedGroup(g.value)}
-                          >{g.name} <span className="badge text-bg-light ms-1">{g.count}</span></button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="row g-2 mb-2">
-                    <div className="col-md-6">
-                      <input className="form-control" placeholder="Tìm thuốc..." value={rxQuery} onChange={e=>setRxQuery(e.target.value)} />
-                    </div>
-                    <div className="col-md-6 d-flex gap-2 align-items-start">
-                      <button type="button" className={`btn btn-outline-primary btn-sm ${rxPriceOrder==='asc'?'active':''}`} onClick={()=> setRxPriceOrder(rxPriceOrder==='asc'? '' : 'asc')}>Giá ↑</button>
-                      <button type="button" className={`btn btn-outline-primary btn-sm ${rxPriceOrder==='desc'?'active':''}`} onClick={()=> setRxPriceOrder(rxPriceOrder==='desc'? '' : 'desc')}>Giá ↓</button>
-                      {rxPriceOrder && <button type="button" className="btn btn-outline-secondary btn-sm" onClick={()=> setRxPriceOrder('')}>Xóa</button>}
-                    </div>
+                <div className="row g-2 mb-3">
+                  <div className="col-md-8">
+                    <input
+                      type="text"
+                      className="form-control"
+                      placeholder="Tìm tên thuốc..."
+                      value={rxQuery}
+                      onChange={e => setRxQuery(e.target.value)}
+                    />
                   </div>
-                  {rxResults.length>0 && (
-                    <div className="list-group mb-2">
+                  <div className="col-md-4 d-flex gap-1">
+                    <button
+                      type="button"
+                      className={`btn btn-sm flex-fill ${rxPriceOrder === 'asc' ? 'btn-primary' : 'btn-outline-primary'}`}
+                      onClick={() => setRxPriceOrder(rxPriceOrder === 'asc' ? '' : 'asc')}
+                    >
+                      Giá ↑
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm flex-fill ${rxPriceOrder === 'desc' ? 'btn-primary' : 'btn-outline-primary'}`}
+                      onClick={() => setRxPriceOrder(rxPriceOrder === 'desc' ? '' : 'desc')}
+                    >
+                      Giá ↓
+                    </button>
+                  </div>
+                </div>
+
+                {rxResults.length > 0 && (
+                  <div className="mb-3">
+                    <label className="form-label fw-semibold small">Kết quả tìm kiếm</label>
+                    <div className="list-group list-group-sm">
                       {rxResults.map(m => (
-                        <button type="button" key={m._id} className="list-group-item list-group-item-action" onClick={()=>addMedicine(m)}>
+                        <button
+                          type="button"
+                          key={m._id}
+                          className="list-group-item list-group-item-action"
+                          onClick={() => addMedicine(m)}
+                        >
                           <div className="d-flex justify-content-between align-items-center">
-                            <span>{m.tenThuoc}</span>
-                            <div className="text-end d-flex flex-column">
+                            <div>
+                              <div className="fw-semibold">{m.tenThuoc}</div>
                               <small className="text-muted">{m.donViTinh || m.dangBaoChe || ''}</small>
-                              {Number.isFinite(m.gia) && <small>{m.gia.toLocaleString()}₫</small>}
                             </div>
+                            <span className="badge bg-light text-dark">
+                              {Number.isFinite(m.gia) ? m.gia.toLocaleString() + '₫' : ''}
+                            </span>
                           </div>
                         </button>
                       ))}
                     </div>
-                  )}
-                  {rxItems.length>0 && (
-                    <div className="table-responsive mb-2">
-                      <table className="table table-sm align-middle">
-                        <thead>
-                          <tr>
-                            <th>Thuốc</th>
-                            <th style={{width:70}}>SL</th>
-                            <th style={{width:60}}>Sáng</th>
-                            <th style={{width:60}}>Trưa</th>
-                            <th style={{width:60}}>Tối</th>
-                            <th style={{width:70}}>Ngày</th>
-                            <th>Ghi chú</th>
-                            <th style={{width:40}}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rxItems.map((it, idx) => (
-                            <tr key={it.thuoc._id}>
-                              <td>
-                                <div className="d-flex flex-column">
-                                  <span>{it.thuoc.tenThuoc}</span>
-                                  <small className="text-muted">{it.thuoc.donViTinh || it.thuoc.dangBaoChe || ''}</small>
-                                  {Number.isFinite(it.thuoc.gia) && <small>{it.thuoc.gia.toLocaleString()}₫</small>}
-                                </div>
-                              </td>
-                              <td><input type="number" min="1" className="form-control form-control-sm" value={it.soLuong} onChange={(e)=>updateQty(idx, e.target.value)} /></td>
-                              <td><input type="number" min="0" className="form-control form-control-sm" value={it.dosageMorning||''} onChange={(e)=> setRxItems(arr=> arr.map((x,i)=> i===idx? { ...x, dosageMorning: e.target.value } : x))} /></td>
-                              <td><input type="number" min="0" className="form-control form-control-sm" value={it.dosageNoon||''} onChange={(e)=> setRxItems(arr=> arr.map((x,i)=> i===idx? { ...x, dosageNoon: e.target.value } : x))} /></td>
-                              <td><input type="number" min="0" className="form-control form-control-sm" value={it.dosageEvening||''} onChange={(e)=> setRxItems(arr=> arr.map((x,i)=> i===idx? { ...x, dosageEvening: e.target.value } : x))} /></td>
-                              <td><input type="number" min="0" className="form-control form-control-sm" value={it.days||''} onChange={(e)=> setRxItems(arr=> arr.map((x,i)=> i===idx? { ...x, days: e.target.value } : x))} /></td>
-                              <td><input type="text" className="form-control form-control-sm" placeholder="HDSD" value={it.usageNote||''} onChange={(e)=> setRxItems(arr=> arr.map((x,i)=> i===idx? { ...x, usageNote: e.target.value } : x))} /></td>
-                              <td><button className="btn btn-outline-danger btn-sm" onClick={()=>removeItem(idx)}><i className="bi bi-x"/></button></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                  <div className="d-flex justify-content-end">
-                    <button className="btn btn-primary" onClick={submitPrescription} disabled={rxItems.length===0}><i className="bi bi-capsule"/> Lưu đơn thuốc</button>
-                  </div>
-                </div>
-
-                {prescriptions.length>0 && (
-                  <div className="mb-3">
-                    <div className="fw-semibold mb-2">Đơn đã kê</div>
-                    <div className="accordion" id="rxAccordion">
-                      {prescriptions.map((rx, idx) => (
-                        <div className="accordion-item" key={rx._id}>
-                          <h2 className="accordion-header" id={`rx-h-${rx._id}`}>
-                            <button className="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target={`#rx-c-${rx._id}`} aria-expanded="false" aria-controls={`rx-c-${rx._id}`}>
-                              <div className="d-flex flex-column">
-                                <span>Đơn {idx+1} • {new Date(rx.createdAt).toLocaleString()}</span>
-                                <small className="text-muted">{rx.items?.length || 0} thuốc</small>
-                              </div>
-                            </button>
-                          </h2>
-                          <div id={`rx-c-${rx._id}`} className="accordion-collapse collapse" aria-labelledby={`rx-h-${rx._id}`} data-bs-parent="#rxAccordion">
-                            <div className="accordion-body p-2">
-                              {(!rx.items || rx.items.length===0) ? <div className="text-muted small">Trống</div> : (
-                                <ul className="list-group list-group-flush">
-                                  {rx.items.map(it => (
-                                    <li key={it._id || it.thuocId?._id || Math.random()} className="list-group-item d-flex justify-content-between align-items-center">
-                                      <div className="d-flex flex-column">
-                                        <span>{it.tenThuoc || it.thuocId?.tenThuoc || '---'}</span>
-                                        <small className="text-muted">{it.thuocId?.loaiThuoc?.ten || '---'}</small>
-                                      </div>
-                                      <span className="badge text-bg-light">SL: {it.soLuong}</span>
-                                    </li>
-                                  ))}
-                                </ul>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
+              </div>
 
-                <hr/>
-                
-               
-               
+              <hr />
+
+              {/* Prescription Table */}
+              {rxItems.length > 0 && (
+                <div className="mb-4">
+                  <label className="form-label fw-semibold">
+                    <i className="bi bi-list-check me-2"></i>Danh sách thuốc kê đơn
+                  </label>
+                  <div className="table-responsive">
+                    <table className="table table-sm align-middle border">
+                      <thead className="table-light">
+                        <tr>
+                          <th>Tên thuốc</th>
+                          <th style={{width:70}} className="text-center">SL</th>
+                          <th style={{width:60}} className="text-center">Sáng</th>
+                          <th style={{width:60}} className="text-center">Trưa</th>
+                          <th style={{width:60}} className="text-center">Tối</th>
+                          <th style={{width:60}} className="text-center">Ngày</th>
+                          <th>Ghi chú</th>
+                          <th style={{width:40}}></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rxItems.map((it, idx) => (
+                          <tr key={it.thuoc._id}>
+                            <td>
+                              <div className="small fw-semibold">{it.thuoc.tenThuoc}</div>
+                              <small className="text-muted">{it.thuoc.donViTinh || it.thuoc.dangBaoChe || ''}</small>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="1"
+                                className="form-control form-control-sm text-center"
+                                value={it.soLuong}
+                                onChange={e => updateQty(idx, e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                className="form-control form-control-sm text-center"
+                                value={it.dosageMorning || ''}
+                                onChange={e => setRxItems(arr => arr.map((x, i) => i === idx ? {...x, dosageMorning: e.target.value} : x))}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                className="form-control form-control-sm text-center"
+                                value={it.dosageNoon || ''}
+                                onChange={e => setRxItems(arr => arr.map((x, i) => i === idx ? {...x, dosageNoon: e.target.value} : x))}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                className="form-control form-control-sm text-center"
+                                value={it.dosageEvening || ''}
+                                onChange={e => setRxItems(arr => arr.map((x, i) => i === idx ? {...x, dosageEvening: e.target.value} : x))}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                min="0"
+                                className="form-control form-control-sm text-center"
+                                value={it.days || ''}
+                                onChange={e => setRxItems(arr => arr.map((x, i) => i === idx ? {...x, days: e.target.value} : x))}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                className="form-control form-control-sm"
+                                placeholder="HDSD"
+                                value={it.usageNote || ''}
+                                onChange={e => setRxItems(arr => arr.map((x, i) => i === idx ? {...x, usageNote: e.target.value} : x))}
+                              />
+                            </td>
+                            <td>
+                              <button
+                                className="btn btn-outline-danger btn-sm"
+                                onClick={() => removeItem(idx)}
+                              >
+                                <i className="bi bi-x"></i>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Previous Prescriptions */}
+              {prescriptions.length > 0 && (
+                <div className="mb-4">
+                  <label className="form-label fw-semibold">
+                    <i className="bi bi-archive me-2"></i>Đơn đã kê
+                  </label>
+                  <div className="accordion accordion-flush">
+                    {prescriptions.map((rx, idx) => (
+                      <div key={rx._id} className="accordion-item">
+                        <h2 className="accordion-header">
+                          <button className="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target={`#rx-${rx._id}`}>
+                            <span className="small">
+                              <strong>Đơn {idx + 1}</strong> • {new Date(rx.createdAt).toLocaleString()}
+                              <span className="badge bg-light text-dark ms-2">{rx.items?.length || 0} thuốc</span>
+                            </span>
+                          </button>
+                        </h2>
+                        <div id={`rx-${rx._id}`} className="accordion-collapse collapse" data-bs-parent="#prescriptions">
+                          <div className="accordion-body p-2">
+                            {(!rx.items || rx.items.length === 0) ? (
+                              <small className="text-muted">Trống</small>
+                            ) : (
+                              <ul className="list-group list-group-sm list-group-flush">
+                                {rx.items.map(it => (
+                                  <li key={it._id || it.thuocId?._id || Math.random()} className="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                      <div className="small fw-semibold">{it.tenThuoc || it.thuocId?.tenThuoc || '---'}</div>
+                                      <small className="text-muted">{it.thuocId?.loaiThuoc?.ten || ''}</small>
+                                    </div>
+                                    <span className="badge bg-light text-dark">SL: {it.soLuong}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="d-flex justify-content-end gap-2 mt-4">
+                <button className="btn btn-outline-secondary" onClick={() => setActiveTab('results')}>
+                  <i className="bi bi-arrow-left me-1"></i>Quay lại
+                </button>
+                <button
+                  className="btn btn-success"
+                  onClick={submitPrescription}
+                  disabled={rxItems.length === 0}
+                >
+                  <i className="bi bi-check-circle me-1"></i>Lưu đơn → Chờ lấy thuốc
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

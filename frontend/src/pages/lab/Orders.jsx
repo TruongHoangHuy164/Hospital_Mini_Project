@@ -10,10 +10,18 @@ export default function LabOrders(){
   const [resultDraft, setResultDraft] = useState({});
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState('table'); // table | cards
-  const today = useMemo(()=> new Date().toISOString().slice(0,10), []);
+  const today = useMemo(()=> {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const date = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${date}`;
+  }, []);
   const [day, setDay] = useState(today); // YYYY-MM-DD
   const [pdfDraft, setPdfDraft] = useState({}); // id -> File
   const [selectedCaseId, setSelectedCaseId] = useState(null);
+  const [autoRefresh, setAutoRefresh] = useState(true); // auto-refresh theo thời gian thực
+  const [refreshInterval, setRefreshInterval] = useState(5); // giây
 
   const headers = useMemo(()=> ({ 'Authorization': `Bearer ${localStorage.getItem('accessToken')||''}`, 'Content-Type': 'application/json' }), []);
 
@@ -43,6 +51,15 @@ export default function LabOrders(){
   }
 
   useEffect(()=>{ load(); /* eslint-disable-next-line */ }, [status, day]);
+
+  // ⏱ Auto-refresh theo thời gian thực
+  useEffect(() => {
+    if (!autoRefresh || day !== today) return; // Chỉ auto-refresh khi xem hôm nay
+    const interval = setInterval(() => {
+      load();
+    }, refreshInterval * 1000);
+    return () => clearInterval(interval);
+  }, [autoRefresh, refreshInterval, day, today]);
 
   function changeDay(offset){
     // offset in days relative to current day state
@@ -138,6 +155,53 @@ export default function LabOrders(){
           <div className="border rounded p-2 bg-light small">
             <div className="d-flex justify-content-between"><span>Tổng chỉ định:</span><strong>{items.length}</strong></div>
             <div className="d-flex justify-content-between"><span>Tổng chi phí:</span><strong>{totalChiPhi.toLocaleString()}₫</strong></div>
+          </div>
+        </div>
+      </div>
+      {/* Auto-refresh theo thời gian thực */}
+      <div className="row g-2 mb-3">
+        <div className="col-md-4">
+          <div className="form-check form-switch">
+            <input 
+              className="form-check-input" 
+              type="checkbox" 
+              id="autoRefresh"
+              checked={autoRefresh}
+              onChange={e=>setAutoRefresh(e.target.checked)}
+              disabled={day !== today}
+            />
+            <label className="form-check-label" htmlFor="autoRefresh">
+              <i className="bi bi-arrow-repeat"></i> Cập nhật tự động ({refreshInterval}s)
+            </label>
+          </div>
+        </div>
+        <div className="col-md-3">
+          <label className="form-label small">Tần suất cập nhật</label>
+          <select 
+            className="form-select form-select-sm" 
+            value={refreshInterval} 
+            onChange={e=>setRefreshInterval(Number(e.target.value))}
+            disabled={!autoRefresh}
+          >
+            <option value={3}>3 giây (nhanh)</option>
+            <option value={5}>5 giây (mặc định)</option>
+            <option value={10}>10 giây</option>
+            <option value={15}>15 giây</option>
+            <option value={30}>30 giây (chậm)</option>
+          </select>
+        </div>
+        <div className="col-md-5 align-self-end">
+          <div className="alert alert-info alert-sm mb-0 py-2">
+            <small>
+              <i className="bi bi-info-circle"></i> 
+              {autoRefresh && day === today ? (
+                <span> ⏱ Tự động cập nhật mỗi {refreshInterval} giây</span>
+              ) : day !== today ? (
+                <span> 📅 Chuyển sang "Hôm nay" để bật cập nhật tự động</span>
+              ) : (
+                <span> ⏸ Cập nhật tự động tắt</span>
+              )}
+            </small>
           </div>
         </div>
       </div>
