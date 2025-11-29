@@ -8,7 +8,7 @@ const DichVuSchema = new mongoose.Schema({
   gia: { type: Number, default: 0, min: 0 },
 }, { timestamps: true });
 
-// Unique service name within a specialty
+// Tên dịch vụ duy nhất trong phạm vi một chuyên khoa
 DichVuSchema.index({ chuyenKhoaId: 1, ten: 1 }, { unique: true });
 
 module.exports = mongoose.model('DichVu', DichVuSchema);

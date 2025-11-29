@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Số thứ tự: quản lý hàng đợi khám theo lịch và trạng thái gọi
 const SoThuTuSchema = new mongoose.Schema(
   {
     lichKhamId: { type: mongoose.Schema.Types.ObjectId, ref: 'LichKham', index: true },

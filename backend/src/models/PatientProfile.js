@@ -79,7 +79,7 @@ const patientProfileSchema = new mongoose.Schema(
   }
 );
 
-// Middleware để tự động tạo mã hồ sơ trước khi lưu
+// Middleware: tự động tạo mã hồ sơ trước khi lưu
 patientProfileSchema.pre('save', function (next) {
   if (!this.maHoSo) {
     // Tạo mã ngẫu nhiên theo định dạng HSXX-XXXXXXX
@@ -90,7 +90,7 @@ patientProfileSchema.pre('save', function (next) {
   next();
 });
 
-// Unique index cho số điện thoại trong hồ sơ người thân
+// Index duy nhất cho số điện thoại trong hồ sơ người thân
 patientProfileSchema.index({ soDienThoai: 1 }, { unique: true, sparse: true });
 const PatientProfile = mongoose.model('PatientProfile', patientProfileSchema);
 

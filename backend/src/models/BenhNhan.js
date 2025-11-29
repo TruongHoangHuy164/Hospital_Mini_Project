@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Bệnh nhân: lưu thông tin cá nhân, liên hệ, ngày sinh và BHYT
 const BenhNhanSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true },

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Chi tiết mô tả sản phẩm thuốc trong kho (text + html)
 const ChiTietSchema = new mongoose.Schema(
   {
     thanh_phan: { text: String, html: String },
@@ -13,6 +14,7 @@ const ChiTietSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Mô hình Kho thuốc: lưu thông tin sản phẩm, đơn vị, mô tả, loại thuốc và chi tiết
 const ThuocKhoSchema = new mongoose.Schema(
   {
     link: { type: String, required: true, trim: true },
@@ -27,6 +29,7 @@ const ThuocKhoSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Text index: hỗ trợ tìm kiếm theo tên sản phẩm
 ThuocKhoSchema.index({ ten_san_pham: 'text' });
 
 module.exports = mongoose.model('ThuocKho', ThuocKhoSchema);

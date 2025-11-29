@@ -10,18 +10,18 @@ const UserSchema = new mongoose.Schema(
   role: { type: String, enum: ['user', 'doctor', 'admin', 'reception', 'lab', 'nurse', 'pharmacy'], default: 'user', index: true },
   permissions: { type: [String], default: [] },
   lastActive: { type: Date, index: true },
-    // Account status
+    // Trạng thái tài khoản
     isLocked: { type: Boolean, default: false, index: true },
-    // Refresh token management (store identifiers, not raw tokens)
+    // Quản lý refresh token (lưu mã định danh, không lưu token thô)
     refreshTokenIds: { type: [String], default: [] },
-    // Password reset
+    // Đặt lại mật khẩu
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date },
   },
   { timestamps: true }
 );
 
-// Helpful compound index for role + recent activity
+// Index kết hợp hỗ trợ truy vấn theo vai trò + hoạt động gần đây
 UserSchema.index({ role: 1, lastActive: -1 });
 
 UserSchema.pre('save', async function (next) {

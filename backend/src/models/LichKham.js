@@ -5,8 +5,8 @@ const LichKhamSchema = new mongoose.Schema(
     // ID của người đặt lịch (tài khoản user)
     nguoiDatId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     // ID của hồ sơ bệnh nhân (có thể là của người đặt hoặc người thân)
-    // Note: either `benhNhanId` (BenhNhan) or `hoSoBenhNhanId` (PatientProfile) will be provided.
-    // Make both optional at schema-level and enforce presence at application logic when creating appointments.
+    // Ghi chú: chỉ một trong hai `benhNhanId` (BenhNhan) hoặc `hoSoBenhNhanId` (PatientProfile) sẽ được cung cấp.
+    // Cả hai đều để tùy chọn ở mức schema và kiểm tra bắt buộc ở logic tạo lịch hẹn.
     hoSoBenhNhanId: { type: mongoose.Schema.Types.ObjectId, ref: 'PatientProfile', required: false, index: true },
     benhNhanId: { type: mongoose.Schema.Types.ObjectId, ref: 'BenhNhan', required: false, index: true },
     bacSiId: { type: mongoose.Schema.Types.ObjectId, ref: 'BacSi', required: true, index: true },

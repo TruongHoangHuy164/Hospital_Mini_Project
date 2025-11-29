@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Bác sĩ: lưu thông tin cá nhân, liên hệ, chuyên môn và trạng thái làm việc
 const BacSiSchema = new mongoose.Schema(
   {
     // Mã bác sĩ nội bộ (nếu có)
@@ -23,13 +24,13 @@ const BacSiSchema = new mongoose.Schema(
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', index: true, unique: true, sparse: true },
 
     // Trình độ & chức danh
-    hocVi: { type: String, trim: true }, // ví dụ: BS, BSCKI, BSCKII, ThS, TS, PGS, GS
-    chucDanh: { type: String, trim: true }, // ví dụ: Trưởng khoa, Bác sĩ điều trị
+    hocVi: { type: String, trim: true }, // Ví dụ: BS, BSCKI, BSCKII, ThS, TS, PGS, GS
+    chucDanh: { type: String, trim: true }, // Ví dụ: Trưởng khoa, Bác sĩ điều trị
     namKinhNghiem: { type: Number, min: 0 },
 
     // Hiển thị & mô tả
-    anhDaiDien: { type: String }, // URL ảnh
-    moTa: { type: String }, // giới thiệu ngắn/bio
+    anhDaiDien: { type: String }, // Đường dẫn ảnh đại diện (URL)
+    moTa: { type: String }, // Giới thiệu ngắn/bio
 
     // Trạng thái làm việc & tình trạng realtime
     trangThai: { type: String, enum: ['dang_cong_tac', 'tam_nghi', 'da_nghi'], default: 'dang_cong_tac', index: true },

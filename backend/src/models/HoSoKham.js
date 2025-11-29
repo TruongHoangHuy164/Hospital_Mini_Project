@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Hồ sơ khám: lưu thông tin lần khám, chẩn đoán, hướng điều trị và tình trạng
 const HoSoKhamSchema = new mongoose.Schema(
   {
     lichKhamId: { type: mongoose.Schema.Types.ObjectId, ref: 'LichKham', required: true, index: true },

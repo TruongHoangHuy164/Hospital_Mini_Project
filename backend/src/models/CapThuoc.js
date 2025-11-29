@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Cấp thuốc: liên kết đơn thuốc với từng thuốc trong kho và số lượng phát
 const CapThuocSchema = new mongoose.Schema(
   {
     donThuocId: { type: mongoose.Schema.Types.ObjectId, ref: 'DonThuoc', required: true, index: true },

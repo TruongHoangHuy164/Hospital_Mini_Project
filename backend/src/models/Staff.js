@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Nhân viên: lưu thông tin nhân viên, vai trò làm việc và liên kết tài khoản
 const StaffSchema = new mongoose.Schema(
   {
     maSo: { type: String, trim: true, unique: true, sparse: true, index: true },
@@ -17,6 +18,6 @@ const StaffSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Unique index cho số điện thoại nhân viên
+// Index duy nhất cho số điện thoại nhân viên
 StaffSchema.index({ soDienThoai: 1 }, { unique: true, sparse: true });
 module.exports = mongoose.model('Staff', StaffSchema);

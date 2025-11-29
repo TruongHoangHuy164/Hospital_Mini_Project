@@ -40,12 +40,12 @@ router.post('/momo/create', auth, authorize('reception','pharmacy','admin'), asy
     const amountNum = Number(amount);
     if (Number.isNaN(amountNum) || amountNum <= 0) return res.status(400).json({ error: 'amount phải là số dương' });
 
-    // Tạo record thanh toán tạm (PENDING)
+    // Tạo record thanh toán tạm (cho_xu_ly)
     const payment = await ThanhToan.create({
       hoSoKhamId,
       soTien: amount,
       hinhThuc: 'momo',
-      status: 'PENDING',
+      status: 'cho_xu_ly',
       targetType: targetType || 'hosokham',
       orderRefs: Array.isArray(orderRefs) ? orderRefs : (orderRefs ? [orderRefs] : []),
     });
@@ -105,7 +105,7 @@ router.post('/momo/notify', async (req, res, next) => {
     payment.momoTransactionId = transId || payment.momoTransactionId;
 
     if (Number(resultCode) === 0) {
-      payment.status = 'PAID';
+      payment.status = 'da_thanh_toan';
       payment.ngayThanhToan = new Date();
       await payment.save();
 
@@ -124,7 +124,7 @@ router.post('/momo/notify', async (req, res, next) => {
       return res.json({ status: 'ok' });
     }
 
-    payment.status = 'FAILED';
+    payment.status = 'that_bai';
     await payment.save();
     return res.json({ status: 'failed' });
   } catch (err) {
@@ -156,7 +156,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
     if(!payment) return res.status(404).json({ ok:false, message: 'Payment not found' });
 
     if(Number(resultCode) === 0){
-      payment.status = 'PAID';
+      payment.status = 'da_thanh_toan';
       payment.ngayThanhToan = new Date();
       payment.momoTransactionId = transId || payment.momoTransactionId;
       payment.rawResponse = req.body;
@@ -174,7 +174,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
       return res.json({ ok: true });
     }
 
-    payment.status = 'FAILED';
+    payment.status = 'that_bai';
     payment.rawResponse = req.body;
     await payment.save();
     return res.json({ ok: false, status: 'failed' });
@@ -256,7 +256,7 @@ router.get('/momo/return', async (req, res) => {
       try{
         const payment = await ThanhToan.findById(orderId);
         if(payment){
-          payment.status = 'PAID';
+          payment.status = 'da_thanh_toan';
           payment.ngayThanhToan = new Date();
           payment.momoTransactionId = transId || payment.momoTransactionId;
           payment.rawResponse = req.query;
@@ -290,7 +290,7 @@ router.post('/cash/create', auth, authorize('reception','admin'), async (req, re
       hoSoKhamId,
       soTien: amount,
       hinhThuc: 'tien_mat',
-      status: 'PAID',
+      status: 'da_thanh_toan',
       ngayThanhToan: new Date(),
       targetType: targetType || 'canlamsang',
       orderRefs: Array.isArray(orderRefs) ? orderRefs : (orderRefs ? [orderRefs] : []),

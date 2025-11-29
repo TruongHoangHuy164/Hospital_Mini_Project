@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Thuốc: thông tin nhận diện, thành phần, dạng bào chế, chỉ định và quản lý giá
 const ThuocSchema = new mongoose.Schema(
   {
     // Định danh & cơ bản
@@ -47,7 +48,7 @@ const ThuocSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Text index để hỗ trợ tìm kiếm theo tên/hoạt chất
+// Text index: hỗ trợ tìm kiếm theo tên thuốc và hoạt chất
 ThuocSchema.index({ tenThuoc: 'text', hoatChat: 'text' });
 
 module.exports = mongoose.model('Thuoc', ThuocSchema);

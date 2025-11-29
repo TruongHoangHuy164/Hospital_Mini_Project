@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 
+// Mô hình Loại thuốc: danh mục/nhóm thuốc để phân loại kho thuốc
 const LoaiThuocSchema = new mongoose.Schema(
   {
     ten: { type: String, required: true, trim: true, unique: true, index: true },
