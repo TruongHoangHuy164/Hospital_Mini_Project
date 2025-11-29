@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { getPharmacyOrders, payOrder } from '../../api/pharmacy';
+import { privateApi } from '../../api/axios';
 
 export default function PharmacyOrders() {
   const [orders, setOrders] = useState([]);
@@ -8,6 +9,7 @@ export default function PharmacyOrders() {
   const [day, setDay] = useState(new Date().toISOString().split('T')[0]);
   const [search, setSearch] = useState('');
   const [payingId, setPayingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -42,23 +44,54 @@ export default function PharmacyOrders() {
     setDay(d.toISOString().split('T')[0]);
   };
 
+  const computeTotal = (o) => {
+    if (!o) return 0;
+    if (typeof o.tongTien === 'number' && o.tongTien > 0) return o.tongTien;
+    const direct = o.totalAmount || o.amount;
+    if (typeof direct === 'number' && direct > 0) return direct;
+    if (Array.isArray(o.items)) {
+      return o.items.reduce((sum, it) => {
+        const qty = it.soLuong || it.quantity || 0;
+        const price = (it.thuocId && typeof it.thuocId.gia === 'number') ? it.thuocId.gia : (it.giaBan || it.price || it.unitPrice || 0);
+        return sum + qty * price;
+      }, 0);
+    }
+    return 0;
+  };
+
   const onPay = async (orderId) => {
     const order = orders.find(o => o._id === orderId);
     if (!order) return;
-    
-    const amount = prompt(`Nhập số tiền thanh toán cho đơn ${order.hoSoKhamId?.benhNhanId?.hoTen}:`, '0');
-    if (amount === null) return;
-    
+    const amount = computeTotal(order);
+    if (!Number.isFinite(amount) || amount <= 0) { alert('Không xác định được số tiền (>0)'); return; }
     setPayingId(orderId);
     try {
-      await payOrder(orderId, { amount: Number(amount) });
+      await privateApi.post(`/payments/prescription/${orderId}/cash`, { amount });
       await load();
-      alert('Đã thu tiền thành công');
+      alert('Đã thu tiền mặt thành công');
     } catch (e) {
-      alert('Lỗi: ' + (e.response?.data?.message || e.message));
-    } finally {
-      setPayingId(null);
-    }
+      alert('Lỗi: ' + (e.response?.data?.error || e.message));
+    } finally { setPayingId(null); }
+  };
+
+  const onPayMomo = async (orderId) => {
+    const order = orders.find(o => o._id === orderId);
+    if (!order) return;
+    const amount = computeTotal(order);
+    if (!Number.isFinite(amount) || amount <= 0) { alert('Không xác định được số tiền (>0)'); return; }
+    setPayingId(orderId);
+    try {
+      const resp = await privateApi.post(`/payments/prescription/${orderId}/momo`, { amount });
+      const payUrl = resp.data?.momo?.payUrl || resp.data?.momo?.deeplink || null;
+      await load();
+      if (payUrl) {
+        window.open(payUrl, '_blank');
+      } else {
+        alert('Đã tạo yêu cầu MoMo. Vui lòng kiểm tra trạng thái.');
+      }
+    } catch (e) {
+      alert('Lỗi: ' + (e.response?.data?.error || e.message));
+    } finally { setPayingId(null); }
   };
 
   return (
@@ -103,31 +136,106 @@ export default function PharmacyOrders() {
               <th>SĐT</th>
               <th>Bác sĩ</th>
               <th>Số thuốc</th>
+              <th>Số tiền</th>
               <th>Ngày kê</th>
               <th style={{ width: 150 }} className="text-end">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} className="text-center py-4">Đang tải...</td></tr>}
-            {!loading && filtered.length === 0 && <tr><td colSpan={7} className="text-center py-4">Không có đơn chờ thanh toán</td></tr>}
+            {loading && <tr><td colSpan={8} className="text-center py-4">Đang tải...</td></tr>}
+            {!loading && filtered.length === 0 && <tr><td colSpan={8} className="text-center py-4">Không có đơn chờ thanh toán</td></tr>}
             {!loading && filtered.map((o, idx) => (
-              <tr key={o._id}>
+              <React.Fragment key={o._id}>
+              <tr>
                 <td>{idx + 1}</td>
                 <td className="fw-semibold">{o.hoSoKhamId?.benhNhanId?.hoTen || '-'}</td>
                 <td className="text-muted">{o.hoSoKhamId?.benhNhanId?.soDienThoai || '-'}</td>
                 <td>{o.hoSoKhamId?.bacSiId?.hoTen || '-'}</td>
                 <td><span className="badge bg-secondary">{o.items?.length || 0}</span></td>
+                <td className="fw-semibold text-danger">{computeTotal(o).toLocaleString('vi-VN')} đ</td>
                 <td className="text-muted small">{new Date(o.ngayKeDon).toLocaleDateString('vi-VN')}</td>
-                <td className="text-end">
+                <td className="text-end d-flex flex-column gap-1">
+                  <button
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => setExpandedId(expandedId === o._id ? null : o._id)}
+                  >
+                    <i className="bi bi-info-circle"></i> {expandedId === o._id ? 'Ẩn' : 'Chi tiết'}
+                  </button>
                   <button 
                     className="btn btn-sm btn-success"
                     onClick={() => onPay(o._id)}
-                    disabled={payingId === o._id}
+                    disabled={payingId === o._id || computeTotal(o) <= 0}
+                    title="Thanh toán tiền mặt"
                   >
-                    {payingId === o._id ? 'Đang...' : <><i className="bi bi-credit-card"></i> Thu tiền</>}
+                    {payingId === o._id ? '...' : <><i className="bi bi-cash-coin"></i> Tiền mặt ({computeTotal(o).toLocaleString('vi-VN')} đ)</>}
+                  </button>
+                  <button 
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={() => onPayMomo(o._id)}
+                    disabled={payingId === o._id || computeTotal(o) <= 0}
+                    title="Thanh toán MoMo"
+                  >
+                    {payingId === o._id ? '...' : <><i className="bi bi-phone"></i> MoMo ({computeTotal(o).toLocaleString('vi-VN')} đ)</>}
                   </button>
                 </td>
               </tr>
+              {expandedId === o._id && (
+                <tr className="bg-light">
+                  <td colSpan={8}>
+                    <div className="p-2">
+                      <div className="fw-semibold mb-2">Chi tiết thuốc ({o.items?.length || 0})</div>
+                      {(!o.items || o.items.length === 0) && <div className="text-muted">Không có dữ liệu thuốc.</div>}
+                      {Array.isArray(o.items) && o.items.length > 0 && (
+                        <div className="table-responsive">
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Tên thuốc</th>
+                                <th>Số lượng</th>
+                                <th>Sáng</th>
+                                <th>Trưa</th>
+                                <th>Chiều</th>
+                                <th>Ngày dùng</th>
+                                <th>Ghi chú</th>
+                                <th>Giá</th>
+                                <th>Thành tiền</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {o.items.map((it, iIdx) => {
+                                const gia = (it.thuocId && typeof it.thuocId.gia === 'number') ? it.thuocId.gia : 0;
+                                const qty = it.soLuong || 0;
+                                return (
+                                  <tr key={iIdx}>
+                                    <td>{iIdx + 1}</td>
+                                    <td>{it.tenThuoc || it.thuocId?.ten_san_pham || '-'}</td>
+                                    <td>{qty}</td>
+                                    <td>{it.dosageMorning || 0}</td>
+                                    <td>{it.dosageNoon || 0}</td>
+                                    <td>{it.dosageEvening || 0}</td>
+                                    <td>{it.days || 0}</td>
+                                    <td className="small">{it.usageNote || '-'}</td>
+                                    <td>{gia.toLocaleString('vi-VN')} đ</td>
+                                    <td>{(gia * qty).toLocaleString('vi-VN')} đ</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr>
+                                <th colSpan={9} className="text-end">Tổng</th>
+                                <th className="text-danger">{computeTotal(o).toLocaleString('vi-VN')} đ</th>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>

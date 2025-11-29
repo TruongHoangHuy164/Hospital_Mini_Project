@@ -31,6 +31,7 @@ import StaffIndex from './pages/admin/staff/Index'
 import StaffEdit from './pages/admin/staff/Edit'
 import AdminWorkSchedulesPage from './pages/admin/schedule/Index'
 import Revenue from './pages/admin/Revenue'
+import AdminBookingStats from './pages/admin/BookingStats'
 import SiteLayout from './layouts/SiteLayout'
 import RequireDoctor from './pages/doctor/RequireDoctor'
 import DoctorLayout from './pages/doctor/Layout'
@@ -51,6 +52,7 @@ import PharmacyDashboard from './pages/pharmacy/Dashboard'
 import PharmacyOrders from './pages/pharmacy/Orders'
 import PharmacyPrepare from './pages/pharmacy/Prepare'
 import PharmacyInventory from './pages/pharmacy/Inventory'
+import PharmacyRevenueStats from './pages/pharmacy/Stats'
 import Intake from './pages/reception/Intake'
 import NewPatient from './pages/reception/NewPatient'
 import ReceptionAppointments from './pages/reception/Appointments'
@@ -132,6 +134,7 @@ export default function App() {
         <Route path="staff/:id" element={<StaffEdit />} />
   <Route path="work-schedules" element={<AdminWorkSchedulesPage />} />
         <Route path="revenue" element={<Revenue />} />
+        <Route path="booking-stats" element={<AdminBookingStats />} />
       </Route>
 
       <Route path="/doctor" element={<RequireDoctor><DoctorLayout /></RequireDoctor>}>
@@ -167,6 +170,7 @@ export default function App() {
         <Route path="orders" element={<PharmacyOrders />} />
         <Route path="prepare" element={<PharmacyPrepare />} />
         <Route path="inventory" element={<PharmacyInventory />} />
+        <Route path="stats" element={<PharmacyRevenueStats />} />
         <Route path="my-schedule" element={<MySchedule />} />
       </Route>
 

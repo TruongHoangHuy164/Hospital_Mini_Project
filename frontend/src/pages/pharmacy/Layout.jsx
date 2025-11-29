@@ -17,6 +17,7 @@ export default function PharmacyLayout() {
               <li className="nav-item"><Link to="/pharmacy/orders" className="nav-link">Thu tiền</Link></li>
               <li className="nav-item"><Link to="/pharmacy/prepare" className="nav-link">Chuẩn bị & Giao</Link></li>
               <li className="nav-item"><Link to="/pharmacy/inventory" className="nav-link">Quản lý kho</Link></li>
+              <li className="nav-item"><Link to="/pharmacy/stats" className="nav-link">Thống kê doanh thu</Link></li>
               <li className="nav-item"><Link to="/pharmacy/my-schedule" className="nav-link">Lịch của tôi</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>

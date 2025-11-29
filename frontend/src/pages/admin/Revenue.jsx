@@ -31,14 +31,22 @@ export default function Revenue() {
   const monthBarData = useMemo(() => {
     if (!summary) return null
     const labels = Array.from({ length: 12 }, (_, i) => `Tháng ${i+1}`)
-    const categories = ['hosokham','canlamsang','donthuoc']
+    // Thêm nhóm 'lichkham' (doanh thu lịch khám cố định 150k)
+    const categories = ['hosokham','canlamsang','donthuoc','lichkham']
     const colors = {
       hosokham: 'rgba(54, 162, 235, 0.6)',
       canlamsang: 'rgba(255, 159, 64, 0.6)',
-      donthuoc: 'rgba(75, 192, 192, 0.6)'
+      donthuoc: 'rgba(75, 192, 192, 0.6)',
+      lichkham: 'rgba(153, 102, 255, 0.6)'
+    }
+    const labelsMap = {
+      hosokham: 'Khám',
+      canlamsang: 'Cận lâm sàng',
+      donthuoc: 'Đơn thuốc',
+      lichkham: 'Lịch khám (150k)'
     }
     const datasets = categories.map(c => ({
-      label: c,
+      label: labelsMap[c],
       data: summary.categorySeries[c] || Array(12).fill(0),
       backgroundColor: colors[c],
     }))
@@ -55,6 +63,7 @@ export default function Revenue() {
         { label: 'Khám', data: monthData.categorySeries.hosokham, borderColor: 'rgba(54, 162, 235, 0.6)', tension: 0.2 },
         { label: 'CLS', data: monthData.categorySeries.canlamsang, borderColor: 'rgba(255, 159, 64, 0.6)', tension: 0.2 },
         { label: 'Thuốc', data: monthData.categorySeries.donthuoc, borderColor: 'rgba(75, 192, 192, 0.6)', tension: 0.2 },
+        { label: 'Lịch khám (150k)', data: monthData.categorySeries.lichkham, borderColor: 'rgba(153, 102, 255, 0.6)', tension: 0.2 },
       ]
     }
   }, [monthData])
@@ -162,6 +171,7 @@ export default function Revenue() {
         <div className="card">
           <div className="card-header">Chi tiết doanh thu ngày {dayDetail.date}</div>
           <div className="card-body">
+            <p className="text-muted mb-2">Doanh thu lịch khám: {dayDetail.bookingRevenue?.toLocaleString()} (số lịch: {dayDetail.bookingCount})</p>
             <div className="table-responsive">
               <table className="table table-sm">
                 <thead>
@@ -183,7 +193,15 @@ export default function Revenue() {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th colSpan={3}>Tổng</th>
+                    <th colSpan={3}>Tổng thanh toán</th>
+                    <th colSpan={3}>{dayDetail.paymentTotal?.toLocaleString()}</th>
+                  </tr>
+                  <tr>
+                    <th colSpan={3}>+ Doanh thu lịch khám</th>
+                    <th colSpan={3}>{dayDetail.bookingRevenue?.toLocaleString()}</th>
+                  </tr>
+                  <tr>
+                    <th colSpan={3}>= Tổng cộng</th>
                     <th colSpan={3}>{dayDetail.total?.toLocaleString()}</th>
                   </tr>
                 </tfoot>

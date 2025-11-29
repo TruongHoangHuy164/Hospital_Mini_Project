@@ -9,6 +9,7 @@ export default function PharmacyPrepare() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('paid'); // 'paid' or 'preparing'
   const [processingId, setProcessingId] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -79,6 +80,19 @@ export default function PharmacyPrepare() {
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const computeTotal = (o) => {
+    if (!o) return 0;
+    if (typeof o.tongTien === 'number' && o.tongTien > 0) return o.tongTien;
+    if (Array.isArray(o.items)) {
+      return o.items.reduce((sum, it) => {
+        const qty = it.soLuong || 0;
+        const gia = (it.thuocId && typeof it.thuocId.gia === 'number') ? it.thuocId.gia : 0;
+        return sum + gia * qty;
+      }, 0);
+    }
+    return 0;
   };
 
   return (
@@ -159,7 +173,8 @@ export default function PharmacyPrepare() {
               {activeTab === 'paid' ? 'Không có đơn chờ chuẩn bị' : 'Không có đơn đang chuẩn bị'}
             </td></tr>}
             {!loading && filtered.map((o, idx) => (
-              <tr key={o._id}>
+              <React.Fragment key={o._id}>
+              <tr>
                 <td>{idx + 1}</td>
                 <td className="fw-semibold">{o.hoSoKhamId?.benhNhanId?.hoTen || '-'}</td>
                 <td className="text-muted">{o.hoSoKhamId?.benhNhanId?.soDienThoai || '-'}</td>
@@ -167,6 +182,12 @@ export default function PharmacyPrepare() {
                 <td><span className="badge bg-secondary">{o.items?.length || 0}</span></td>
                 <td className="text-muted small">{new Date(o.ngayKeDon).toLocaleDateString('vi-VN')}</td>
                 <td className="text-end">
+                  <button
+                    className="btn btn-sm btn-outline-secondary me-1"
+                    onClick={() => setExpandedId(expandedId === o._id ? null : o._id)}
+                  >
+                    <i className="bi bi-info-circle"></i> {expandedId === o._id ? 'Ẩn' : 'Chi tiết'}
+                  </button>
                   {activeTab === 'paid' ? (
                     <button 
                       className="btn btn-sm btn-primary"
@@ -186,6 +207,66 @@ export default function PharmacyPrepare() {
                   )}
                 </td>
               </tr>
+              {expandedId === o._id && (
+                <tr className="bg-light">
+                  <td colSpan={7}>
+                    <div className="p-2">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <span className="fw-semibold">Chi tiết thuốc ({o.items?.length || 0})</span>
+                        <span className="text-danger small">Tổng: {computeTotal(o).toLocaleString('vi-VN')} đ</span>
+                      </div>
+                      {(!o.items || o.items.length === 0) && <div className="text-muted">Không có dữ liệu thuốc.</div>}
+                      {Array.isArray(o.items) && o.items.length > 0 && (
+                        <div className="table-responsive">
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th>#</th>
+                                <th>Tên thuốc</th>
+                                <th>Số lượng</th>
+                                <th>Sáng</th>
+                                <th>Trưa</th>
+                                <th>Chiều</th>
+                                <th>Ngày dùng</th>
+                                <th>Ghi chú</th>
+                                <th>Giá</th>
+                                <th>Thành tiền</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {o.items.map((it, iIdx) => {
+                                const gia = (it.thuocId && typeof it.thuocId.gia === 'number') ? it.thuocId.gia : 0;
+                                const qty = it.soLuong || 0;
+                                return (
+                                  <tr key={iIdx}>
+                                    <td>{iIdx + 1}</td>
+                                    <td>{it.tenThuoc || it.thuocId?.ten_san_pham || '-'}</td>
+                                    <td>{qty}</td>
+                                    <td>{it.dosageMorning || 0}</td>
+                                    <td>{it.dosageNoon || 0}</td>
+                                    <td>{it.dosageEvening || 0}</td>
+                                    <td>{it.days || 0}</td>
+                                    <td className="small">{it.usageNote || '-'}</td>
+                                    <td>{gia.toLocaleString('vi-VN')} đ</td>
+                                    <td>{(gia * qty).toLocaleString('vi-VN')} đ</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot>
+                              <tr>
+                                <th colSpan={9} className="text-end">Tổng</th>
+                                <th className="text-danger">{computeTotal(o).toLocaleString('vi-VN')} đ</th>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
