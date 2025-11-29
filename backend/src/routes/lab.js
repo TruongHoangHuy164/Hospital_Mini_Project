@@ -8,6 +8,10 @@ const multer = require('multer');
 
 const router = express.Router();
 
+// ===== Phòng xét nghiệm (Lab) =====
+// Quản lý các chỉ định cận lâm sàng (CanLamSang) và kết quả.
+// Lưu ý: Mặc định chỉ hiển thị các chỉ định đã thanh toán (`daThanhToan = true`).
+
 // List pending orders
 // GET /api/lab/orders?status=cho_thuc_hien|dang_thuc_hien|da_xong
 router.get('/orders', async (req, res, next) => {
@@ -59,6 +63,7 @@ router.get('/orders', async (req, res, next) => {
 router.post('/orders/:id/start', async (req, res, next) => {
   try{
     const u = req.user;
+    // Nhận việc và chuyển trạng thái chỉ định sang 'dang_thuc_hien'
     const doc = await CanLamSang.findByIdAndUpdate(req.params.id, { $set: { trangThai: 'dang_thuc_hien', nhanVienId: u?.id, ngayThucHien: new Date() } }, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy chỉ định' });
     res.json(doc);
@@ -68,6 +73,7 @@ router.post('/orders/:id/start', async (req, res, next) => {
 router.patch('/orders/:id/start', async (req, res, next) => {
   try{
     const u = req.user;
+    // Cho phép nhấn bắt đầu bằng PATCH (tương tự POST)
     const doc = await CanLamSang.findByIdAndUpdate(req.params.id, { $set: { trangThai: 'dang_thuc_hien', nhanVienId: u?.id, ngayThucHien: new Date() } }, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy chỉ định' });
     res.json(doc);
@@ -79,6 +85,7 @@ router.patch('/orders/:id/start', async (req, res, next) => {
 router.post('/orders/:id/complete', async (req, res, next) => {
   try{
     const { ketQua } = req.body || {};
+    // Hoàn thành và đặt trạng thái 'da_xong'. Có thể cập nhật kết quả dạng text.
     const doc = await CanLamSang.findByIdAndUpdate(req.params.id, { $set: { ketQua: ketQua||'', trangThai: 'da_xong' } }, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy chỉ định' });
     res.json(doc);

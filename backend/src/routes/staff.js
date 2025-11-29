@@ -5,6 +5,11 @@ const User = require('../models/User');
 
 const router = express.Router();
 
+// ===== Quản lý Nhân viên (Staff) =====
+// Các vai trò hỗ trợ: reception, lab, cashier, nurse, pharmacy.
+// API liệt kê hỗ trợ lọc theo `vaiTro`, `q` (họ tên), `phongKhamId` và phân trang.
+// Cấp tài khoản: tạo `User` tương ứng và gán `userId` cho Staff, map vai trò phù hợp.
+
 // GET /api/staff?vaiTro=reception|lab&q=&phongKhamId=&page=&limit=
 router.get('/', async (req, res, next) => {
   try{
@@ -71,6 +76,9 @@ router.delete('/:id', async (req, res, next) => {
 // POST /api/staff/:id/provision-account - cấp tài khoản theo email như bác sĩ
 router.post('/:id/provision-account', async (req, res, next) => {
   try{
+    // Cấp tài khoản dựa trên email của nhân viên.
+    // - Kiểm tra tồn tại Staff, chưa có `userId`, và có `email`.
+    // - Tạo `User` với mật khẩu mặc định '123456' và vai trò mapping từ `vaiTro`.
     const st = await Staff.findById(req.params.id);
     if(!st) return res.status(404).json({ message: 'Không tìm thấy nhân viên' });
     if(st.userId) return res.status(400).json({ message: 'Nhân viên đã có tài khoản' });

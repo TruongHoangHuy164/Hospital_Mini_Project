@@ -1,14 +1,22 @@
+// Router quản lý người dùng và hồ sơ bệnh nhân (self-service)
 const express = require('express');
+// Model người dùng
 const User = require('../models/User');
+// Model bệnh nhân (thông tin hồ sơ bệnh nhân gắn với user)
 const BenhNhan = require('../models/BenhNhan');
+// Model OTP dùng cho các thao tác bảo mật (đổi mật khẩu)
 const Otp = require('../models/Otp');
+// Middleware xác thực và phân quyền
 const auth = require('../middlewares/auth');
 const authorize = require('../middlewares/authorize');
+// Dịch vụ email để gửi mã OTP
 const { sendOtpEmail } = require('../services/emailService');
 
 const router = express.Router();
 
 // GET /api/users?page=1&limit=10&q=abc&role=admin
+// Mô tả: Liệt kê người dùng với phân trang, tìm kiếm theo tên/email và lọc theo vai trò.
+// Phân quyền: Chỉ admin.
 router.get('/', auth, authorize('admin'), async (req, res, next) => {
   try {
     const page = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -35,7 +43,7 @@ router.get('/', auth, authorize('admin'), async (req, res, next) => {
       User.countDocuments(filter),
     ]);
 
-    // Attach phone (soDienThoai) from BenhNhan if available (single query)
+    // Gắn số điện thoại từ hồ sơ BenhNhan nếu có (1 truy vấn để ghép)
     try {
       const userIds = items.map(u => String(u._id));
       const phones = await BenhNhan.find({ userId: { $in: userIds } }).select('userId soDienThoai');
@@ -43,7 +51,7 @@ router.get('/', auth, authorize('admin'), async (req, res, next) => {
       for (const p of phones) phoneMap[String(p.userId)] = p.soDienThoai || '';
       const itemsWithPhone = items.map(u => {
         const obj = (u.toObject ? u.toObject() : u);
-        // Prefer phone stored on User model; fallback to BenhNhan.soDienThoai
+        // Ưu tiên số điện thoại trên User; nếu không có, dùng BenhNhan.soDienThoai
         obj.phone = obj.phone || phoneMap[String(obj._id)] || '';
         return obj;
       });
@@ -56,7 +64,7 @@ router.get('/', auth, authorize('admin'), async (req, res, next) => {
         totalPages: Math.ceil(total / limit),
       });
     } catch (e) {
-      // If anything goes wrong attaching phones, still return users without phones
+      // Nếu lỗi khi gắn số điện thoại, vẫn trả danh sách người dùng
       return res.json({
         items,
         total,
@@ -70,14 +78,14 @@ router.get('/', auth, authorize('admin'), async (req, res, next) => {
   }
 });
 
-// GET /api/users/:id/profile - admin can fetch any user's combined profile
+// GET /api/users/:id/profile - Admin lấy hồ sơ tổng hợp của bất kỳ user
 router.get('/:id/profile', auth, authorize('admin'), async (req, res, next) => {
   try {
     const { id } = req.params;
     const user = await User.findById(id).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
     if (!user) return res.status(404).json({ message: 'Người dùng không tồn tại' });
 
-    // Find benhNhan record (latest)
+    // Tìm hồ sơ BenhNhan mới nhất gắn với user
     const benhNhan = await BenhNhan.findOne({ userId: id }).sort({ createdAt: -1 });
 
     const profile = {
@@ -100,22 +108,22 @@ router.get('/:id/profile', auth, authorize('admin'), async (req, res, next) => {
   }
 });
 
-// GET /api/users/my-patient-profile - get current user's BenhNhan profile for self-booking
+// GET /api/users/my-patient-profile - Lấy hồ sơ BenhNhan của chính user (dùng đặt lịch)
 router.get('/my-patient-profile', auth, async (req, res, next) => {
   try {
     const userId = req.user.id;
     
-    // Find the first BenhNhan record for this user (self profile)
+    // Tìm hồ sơ BenhNhan đầu tiên của user
     let benhNhan = await BenhNhan.findOne({ userId }).sort({ createdAt: -1 });
     
     if (!benhNhan) {
-      // If no BenhNhan profile exists, create a basic one from User data
+      // Nếu chưa có, tạo hồ sơ cơ bản từ dữ liệu User
       const user = await User.findById(userId);
       if (!user) {
         return res.status(404).json({ message: 'Người dùng không tồn tại' });
       }
       
-      // Create basic BenhNhan profile from User
+      // Tạo hồ sơ BenhNhan cơ bản từ User
       benhNhan = await BenhNhan.create({
         userId: userId,
         hoTen: user.name || 'Chưa cập nhật',
@@ -133,22 +141,22 @@ router.get('/my-patient-profile', auth, async (req, res, next) => {
   }
 });
 
-// GET /api/users/profile - get current user's complete profile info
+// GET /api/users/profile - Lấy hồ sơ tổng hợp của chính user
 router.get('/profile', auth, async (req, res, next) => {
   try {
     const userId = req.user.id;
     
-    // Get User basic info
+    // Lấy thông tin cơ bản từ User
     const user = await User.findById(userId).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
     if (!user) {
       return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }
     
-    // Get BenhNhan detailed info
+    // Lấy thông tin chi tiết từ BenhNhan
     let benhNhan = await BenhNhan.findOne({ userId }).sort({ createdAt: -1 });
     
     if (!benhNhan) {
-      // Create basic BenhNhan profile if doesn't exist
+      // Tạo hồ sơ BenhNhan cơ bản nếu chưa có
       benhNhan = await BenhNhan.create({
         userId: userId,
         hoTen: user.name || 'Chưa cập nhật',
@@ -157,7 +165,7 @@ router.get('/profile', auth, async (req, res, next) => {
       });
     }
     
-    // Combine both profiles
+    // Gộp dữ liệu từ User và BenhNhan thành profile tổng hợp
     const profile = {
       // User info
       id: user._id,
@@ -180,13 +188,13 @@ router.get('/profile', auth, async (req, res, next) => {
   }
 });
 
-// PUT /api/users/profile - update current user's profile info
+// PUT /api/users/profile - Cập nhật hồ sơ của chính user
 router.put('/profile', auth, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { hoTen, ngaySinh, gioiTinh, diaChi, soDienThoai, maBHYT } = req.body;
     
-    // Validation
+    // Kiểm tra hợp lệ đầu vào
     if (!hoTen || hoTen.trim().length === 0) {
       return res.status(400).json({ message: 'Họ tên không được để trống' });
     }
@@ -209,12 +217,12 @@ router.put('/profile', auth, async (req, res, next) => {
       return res.status(400).json({ message: 'Số điện thoại không hợp lệ' });
     }
     
-    // Update User name
+    // Cập nhật tên trên model User
     await User.findByIdAndUpdate(userId, { 
       name: hoTen.trim() 
     });
     
-    // Update or create BenhNhan profile
+    // Cập nhật hoặc tạo hồ sơ BenhNhan
     const updateData = {
       hoTen: hoTen.trim(),
       ...(ngaySinh && { ngaySinh: new Date(ngaySinh) }),
@@ -230,7 +238,7 @@ router.put('/profile', auth, async (req, res, next) => {
       { new: true, upsert: true }
     );
     
-    // Return updated profile
+    // Trả về hồ sơ đã cập nhật
     const user = await User.findById(userId).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
     
     const profile = {
@@ -256,43 +264,43 @@ router.put('/profile', auth, async (req, res, next) => {
   }
 });
 
-// POST /api/users/request-change-password-otp - request OTP for password change
+// POST /api/users/request-change-password-otp - Yêu cầu mã OTP để đổi mật khẩu
 router.post('/request-change-password-otp', auth, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { currentPassword } = req.body;
     
-    // Validation
+    // Kiểm tra hợp lệ đầu vào
     if (!currentPassword) {
       return res.status(400).json({ message: 'Vui lòng nhập mật khẩu hiện tại' });
     }
     
-    // Get user and verify current password
+    // Lấy user và kiểm tra mật khẩu hiện tại
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }
     
-    // Check current password
+    // Đối chiếu mật khẩu hiện tại
     const isCurrentPasswordValid = await user.comparePassword(currentPassword);
     if (!isCurrentPasswordValid) {
       return res.status(400).json({ message: 'Mật khẩu hiện tại không đúng' });
     }
     
-    // Generate 6-digit OTP
+    // Sinh mã OTP 6 chữ số
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Set expiration time (3 minutes from now)
+    // Thời hạn hiệu lực OTP: 3 phút kể từ bây giờ
     const expiresAt = new Date(Date.now() + 3 * 60 * 1000); // 3 minutes
     
-    // Delete any existing unused OTPs for this user and type
+    // Xóa mã OTP chưa dùng trước đó của user cho loại change_password
     await Otp.deleteMany({ 
       userId, 
       type: 'change_password', 
       isUsed: false 
     });
     
-    // Create new OTP
+    // Tạo OTP mới
     const newOtp = await Otp.create({
       userId,
       email: user.email,
@@ -301,11 +309,11 @@ router.post('/request-change-password-otp', auth, async (req, res, next) => {
       expiresAt
     });
     
-    // Send OTP via email
+    // Gửi OTP qua email
     const emailResult = await sendOtpEmail(user.email, otp, 'change_password');
     
     if (!emailResult.success) {
-      // If email fails, delete the OTP and return error
+      // Nếu gửi email thất bại, xóa OTP vừa tạo và trả lỗi
       await Otp.findByIdAndDelete(newOtp._id);
       return res.status(500).json({ 
         message: 'Không thể gửi email OTP. Vui lòng thử lại sau.',
@@ -323,13 +331,13 @@ router.post('/request-change-password-otp', auth, async (req, res, next) => {
   }
 });
 
-// POST /api/users/verify-change-password-otp - verify OTP and change password
+// POST /api/users/verify-change-password-otp - Xác thực OTP và đổi mật khẩu
 router.post('/verify-change-password-otp', auth, async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { otp, newPassword } = req.body;
     
-    // Validation
+    // Kiểm tra hợp lệ đầu vào
     if (!otp || !newPassword) {
       return res.status(400).json({ message: 'Thiếu mã OTP hoặc mật khẩu mới' });
     }
@@ -342,7 +350,7 @@ router.post('/verify-change-password-otp', auth, async (req, res, next) => {
       return res.status(400).json({ message: 'Mã OTP phải là 6 chữ số' });
     }
     
-    // Find valid OTP
+    // Tìm OTP hợp lệ còn hiệu lực
     const otpRecord = await Otp.findOne({
       userId,
       otp,
@@ -357,25 +365,25 @@ router.post('/verify-change-password-otp', auth, async (req, res, next) => {
       });
     }
     
-    // Get user
+    // Lấy user
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: 'Người dùng không tồn tại' });
     }
     
-    // Mark OTP as used
+    // Đánh dấu OTP đã sử dụng
     otpRecord.isUsed = true;
     await otpRecord.save();
     
-    // Update password (will be hashed by pre-save middleware)
+    // Cập nhật mật khẩu mới (được hash bởi middleware trước khi lưu)
     user.password = newPassword;
     await user.save();
     
-    // Clear all refresh tokens to force re-login on other devices
+    // Xóa toàn bộ refreshTokenIds để buộc đăng nhập lại trên thiết bị khác
     user.refreshTokenIds = [];
     await user.save();
     
-    // Clean up any remaining OTPs for this user
+    // Dọn dẹp các OTP còn lại của user
     await Otp.deleteMany({ userId, type: 'change_password' });
     
     return res.json({ 

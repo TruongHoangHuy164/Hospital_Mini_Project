@@ -28,6 +28,11 @@ async function loadDoctor(req, res, next){
 function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); }
 
+// ===== API cho Bác sĩ (tự thao tác) =====
+// Mục tiêu: cho phép bác sĩ xem/cập nhật hồ sơ cá nhân, quản lý lịch làm việc,
+// xử lý hàng đợi bệnh nhân theo lịch hẹn/số thứ tự, và thao tác hồ sơ khám.
+// Lưu ý: tất cả các endpoint yêu cầu đã đăng nhập; `loadDoctor` kiểm tra và gắn `req.doctor`.
+
 // GET /api/doctor/me - lấy hồ sơ bác sĩ gắn với tài khoản đăng nhập
 router.get('/me', async (req, res, next) => {
   try {
@@ -44,6 +49,9 @@ router.get('/me', async (req, res, next) => {
 // PUT /api/doctor/me - cập nhật thông tin cá nhân (giới hạn các trường cho phép)
 router.put('/me', loadDoctor, async (req, res, next) => {
   try {
+    // Body cho phép: hoTen, email, soDienThoai, diaChi, anhDaiDien, moTa, ngaySinh, gioiTinh
+    // - Kiểm tra hợp lệ email/sđt/ngày sinh/giới tính
+    // - Tránh trùng sđt với bác sĩ khác
     const allow = ['hoTen','email','soDienThoai','diaChi','anhDaiDien','moTa','ngaySinh','gioiTinh'];
     const body = req.body || {};
     const update = {};
@@ -129,6 +137,7 @@ router.put('/me', loadDoctor, async (req, res, next) => {
 // GET /api/doctor/patients - tìm kiếm bệnh nhân theo tên/sđt
 router.get('/patients', loadDoctor, async (req, res, next) => {
   try{
+    // Query: q (tên), phone (số điện thoại), phân trang (page/limit)
     const { q, phone } = req.query;
     const filter = {};
     if (q) filter.hoTen = { $regex: q, $options: 'i' };
@@ -146,6 +155,7 @@ router.get('/patients', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/patients - tạo bệnh nhân nhanh
 router.post('/patients', loadDoctor, async (req, res, next) => {
   try{
+    // Body: { hoTen, soDienThoai?, ngaySinh?, gioiTinh?, diaChi? }
     const { hoTen, soDienThoai, ngaySinh, gioiTinh, diaChi } = req.body || {};
     if(!hoTen) return res.status(400).json({ message: 'Thiếu họ tên' });
     const bn = await BenhNhan.create({ hoTen, soDienThoai, ngaySinh, gioiTinh, diaChi });
@@ -156,6 +166,7 @@ router.post('/patients', loadDoctor, async (req, res, next) => {
 // GET /api/doctor/cases - danh sách hồ sơ khám của bác sĩ hiện tại (tùy chọn lọc theo ngày)
 router.get('/cases', loadDoctor, async (req, res, next) => {
   try{
+    // Query: date = 'today' hoặc 'YYYY-MM-DD' để lọc theo ngày tạo
     const bacSiId = req.doctor._id;
     const filter = { bacSiId };
     const { date } = req.query;
@@ -187,6 +198,9 @@ router.get('/cases', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/cases - tạo hồ sơ khám
 router.post('/cases', loadDoctor, async (req, res, next) => {
   try{
+    // Body: { benhNhanId, chanDoan?, huongDieuTri? }
+    // - `huongDieuTri` một trong: ngoai_tru|noi_tru|chuyen_vien|ke_don
+    // - Kiểm tra sự tồn tại của bệnh nhân trước khi tạo
     const bacSiId = req.doctor._id;
     const { benhNhanId, chanDoan, huongDieuTri } = req.body || {};
     if(!benhNhanId) return res.status(400).json({ message: 'Thiếu benhNhanId' });
@@ -206,6 +220,8 @@ router.post('/cases', loadDoctor, async (req, res, next) => {
 // Danh sách thuốc lấy từ kho (ThuocKho)
 router.get('/medicines', loadDoctor, async (req, res, next) => {
   try {
+    // Query: q (tìm kiếm), group (id loaiThuoc | 'NONE' | 'ALL'), priceOrder ('asc'|'desc')
+    // - Ưu tiên text search; fallback regex nếu không có kết quả
     const { q, group, priceOrder } = req.query; // group = loaiThuoc id hoặc 'NONE' hoặc 'ALL'; priceOrder='asc'|'desc'
     const limit = Math.min(parseInt(req.query.limit || '10', 10), 50);
     const filter = {};
@@ -258,6 +274,7 @@ router.get('/medicines', loadDoctor, async (req, res, next) => {
 // Nhóm thuốc dựa trên loaiThuoc (Danh mục); thêm 'Khác' cho thuốc chưa phân loại
 router.get('/medicine-groups', loadDoctor, async (req, res, next) => {
   try {
+    // Gom nhóm theo `loaiThuoc`, trả về tên nhóm và số lượng
     const agg = await ThuocKho.aggregate([
       { $group: { _id: '$loaiThuoc', count: { $sum: 1 } } },
       { $sort: { count: -1 } }
@@ -279,6 +296,7 @@ router.get('/medicine-groups', loadDoctor, async (req, res, next) => {
 // GET /api/doctor/schedule?from=YYYY-MM-DD&to=YYYY-MM-DD
 router.get('/schedule', loadDoctor, async (req, res, next) => {
   try{
+    // Query: from/to (YYYY-MM-DD) để lọc khoảng ngày
     const { from, to } = req.query;
     const filter = { bacSiId: req.doctor._id };
     if(from || to){
@@ -297,6 +315,8 @@ router.get('/schedule', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/schedule
 router.post('/schedule', loadDoctor, async (req, res, next) => {
   try{
+    // Body: { ngay, ca, loaiCa='lam_viec', phongKhamId?, lyDo?, note? }
+    // - Chuẩn hóa `ngay` về đầu ngày
     const { ngay, ca, loaiCa = 'lam_viec', phongKhamId, lyDo, note } = req.body || {};
     if(!ngay || !ca) return res.status(400).json({ message: 'Thiếu ngày/ca' });
     const d = new Date(ngay);
@@ -312,6 +332,7 @@ router.post('/schedule', loadDoctor, async (req, res, next) => {
 // PUT /api/doctor/schedule/:id
 router.put('/schedule/:id', loadDoctor, async (req, res, next) => {
   try{
+    // Cập nhật các trường cho phép; chuẩn hóa `ngay` (nếu có)
     const { id } = req.params;
     const allow = ['ca','loaiCa','phongKhamId','lyDo','note','ngay'];
     const body = req.body || {};
@@ -330,6 +351,7 @@ router.put('/schedule/:id', loadDoctor, async (req, res, next) => {
 // DELETE /api/doctor/schedule/:id
 router.delete('/schedule/:id', loadDoctor, async (req, res, next) => {
   try{
+    // Xóa lịch làm việc theo `id` (chỉ của chính bác sĩ)
     const { id } = req.params;
     const r = await DoctorSchedule.findOneAndDelete({ _id: id, bacSiId: req.doctor._id });
     if(!r) return res.status(404).json({ message: 'Không tìm thấy lịch' });
@@ -340,6 +362,9 @@ router.delete('/schedule/:id', loadDoctor, async (req, res, next) => {
 // ===== Danh sách bệnh nhân trong ngày (theo lịch hẹn hoặc số thứ tự) =====
 router.get('/today/patients', loadDoctor, async (req, res, next) => {
   try{
+    // Danh sách bệnh nhân trong ngày: dựa trên lịch khám của bác sĩ
+    // - Join với bảng số thứ tự (SoThuTu) để lấy thứ tự
+    // - Sắp xếp theo số thứ tự, sau đó theo khung giờ
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const end = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1);
@@ -369,6 +394,7 @@ router.get('/today/patients', loadDoctor, async (req, res, next) => {
 // GET /api/doctor/today/stats - lấy thống kê của ngày hôm nay
 router.get('/today/stats', loadDoctor, async (req, res, next) => {
   try{
+    // Thống kê trong ngày: số chỉ định chưa có kết quả, số đơn thuốc
     const today = new Date();
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const end = new Date(today.getFullYear(), today.getMonth(), today.getDate()+1);
@@ -403,6 +429,9 @@ router.get('/today/stats', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/appointments/:id/intake
 router.post('/appointments/:id/intake', loadDoctor, async (req, res, next) => {
   try {
+    // Tiếp nhận bệnh nhân theo lịch hẹn:
+    // - Đảm bảo có STT (tạo nếu chưa có), chuyển trạng thái STT sang 'da_goi'
+    // - Tạo (hoặc lấy) hồ sơ khám (HoSoKham) liên kết với lịch
     const { id } = req.params;
     // Lấy lịch khám thuộc bác sĩ hiện tại
     const appt = await LichKham.findOne({ _id: id, bacSiId: req.doctor._id }).populate('benhNhanId','hoTen soDienThoai ngaySinh gioiTinh');
@@ -436,6 +465,7 @@ router.post('/appointments/:id/intake', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/appointments/:id/skip
 router.post('/appointments/:id/skip', loadDoctor, async (req, res, next) => {
   try {
+    // Đánh dấu bỏ qua bệnh nhân trong hàng đợi của lịch hẹn
     const appt = await LichKham.findOne({ _id: req.params.id, bacSiId: req.doctor._id });
     if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
     let stt = await SoThuTu.findOne({ lichKhamId: appt._id });
@@ -451,6 +481,9 @@ router.post('/appointments/:id/skip', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/queue/next
 router.post('/queue/next', loadDoctor, async (req, res, next) => {
   try {
+    // Gọi bệnh nhân tiếp theo:
+    // - Tìm STT 'dang_cho' nhỏ nhất trong ngày
+    // - Chuyển sang 'da_goi' và đảm bảo hồ sơ khám tồn tại
     const today = new Date();
     const start = startOfDay(today); const end = endOfDay(today);
     const appts = await LichKham.find({ bacSiId: req.doctor._id, ngayKham: { $gte: start, $lt: end } }).select('_id benhNhanId').lean();
@@ -476,6 +509,7 @@ router.post('/queue/next', loadDoctor, async (req, res, next) => {
 // POST /api/doctor/appointments/:id/notify
 router.post('/appointments/:id/notify', loadDoctor, async (req, res, next) => {
   try {
+    // Gửi thông báo mời vào (mô phỏng); nếu đang 'dang_cho' thì chuyển sang 'da_goi'
     const appt = await LichKham.findOne({ _id: req.params.id, bacSiId: req.doctor._id }).populate('benhNhanId','hoTen soDienThoai');
     if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
     let stt = await SoThuTu.findOne({ lichKhamId: appt._id });
@@ -490,6 +524,7 @@ router.post('/appointments/:id/notify', loadDoctor, async (req, res, next) => {
 // PUT /api/doctor/work-status { status }
 router.put('/work-status', loadDoctor, async (req, res, next) => {
   try {
+    // Cập nhật trạng thái làm việc hiện tại của bác sĩ: 'dang_kham' | 'nghi' | 'ban'
     const { status } = req.body || {};
     if(!['dang_kham','nghi','ban'].includes(status)) return res.status(400).json({ message: 'Status không hợp lệ' });
     req.doctor.trangThaiHienTai = status;

@@ -1,23 +1,33 @@
+// Router đặt lịch khám và truy xuất kết quả/hồ sơ bệnh nhân
 const express = require('express');
 const mongoose = require('mongoose');
 const crypto = require('crypto');
+// Model bệnh nhân (self)
 const BenhNhan = require('../models/BenhNhan');
+// Model chuyên khoa
 const ChuyenKhoa = require('../models/ChuyenKhoa');
+// Model bác sĩ
 const BacSi = require('../models/BacSi');
+// Model lịch khám
 const LichKham = require('../models/LichKham');
+// Model số thứ tự
 const SoThuTu = require('../models/SoThuTu');
+// Model hồ sơ khám
 const HoSoKham = require('../models/HoSoKham');
+// Model cận lâm sàng
 const CanLamSang = require('../models/CanLamSang');
+// Hồ sơ người thân
 const PatientProfile = require('../models/PatientProfile');
 const auth = require('../middlewares/auth');
 
 const router = express.Router();
 
 // Helpers
+// Tính đầu ngày/cuối ngày để lọc theo ngày
 function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); }
 
-// POST /api/booking/patients - create or update a patient profile for current user
+// POST /api/booking/patients - Tạo/cập nhật hồ sơ bệnh nhân cho chính user hiện tại
 router.post('/patients', auth, async (req, res, next) => {
   try{
     const userId = req.user?.id || null;
@@ -33,7 +43,7 @@ router.post('/patients', auth, async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// GET /api/booking/patients - list patients of current user (or search by phone for guests)
+// GET /api/booking/patients - Liệt kê bệnh nhân của user hiện tại (hoặc tìm theo SĐT cho khách)
 router.get('/patients', auth, async (req, res, next) => {
   try{
     const userId = req.user?.id || null;
@@ -45,7 +55,7 @@ router.get('/patients', auth, async (req, res, next) => {
 });
 
 // GET /api/booking/my-appointments?page=1&limit=10
-// Return appointments for current user (based on LichKham.nguoiDatId)
+// Mô tả: Trả về danh sách lịch khám của user hiện tại (theo LichKham.nguoiDatId)
 router.get('/my-appointments', auth, async (req, res, next) => {
   try{
     const page = Math.max(parseInt(req.query.page||'1',10),1);
@@ -92,6 +102,7 @@ router.get('/my-appointments', auth, async (req, res, next) => {
 
 
 // GET /api/booking/my-results?page=1&limit=10
+// Mô tả: Trả kết quả cận lâm sàng của các hồ sơ thuộc bệnh nhân của user hiện tại
 router.get('/my-results', auth, async (req, res, next) => {
   try{
     const page = Math.max(parseInt(req.query.page||'1',10),1);
@@ -127,7 +138,7 @@ router.get('/my-results', auth, async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// ===== Patient: list my cases (medical records) =====
+// ===== Bệnh nhân: liệt kê hồ sơ khám của mình =====
 // GET /api/booking/my-cases?page=1&limit=20
 router.get('/my-cases', auth, async (req, res, next) => {
   try {
@@ -159,7 +170,7 @@ router.get('/my-cases', auth, async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
-// ===== Patient: case detail with labs & prescriptions =====
+// ===== Bệnh nhân: chi tiết hồ sơ (kèm cận lâm sàng & đơn thuốc) =====
 // GET /api/booking/my-cases/:id/detail
 router.get('/my-cases/:id/detail', auth, async (req, res, next) => {
   try {
@@ -213,7 +224,7 @@ router.get('/my-cases/:id/detail', auth, async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
-// GET /api/booking/specialties - list specialties
+// GET /api/booking/specialties - Liệt kê chuyên khoa
 router.get('/specialties', async (req, res, next) => {
   try{
     const items = await ChuyenKhoa.find().sort({ ten: 1 });
@@ -221,7 +232,7 @@ router.get('/specialties', async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// GET /api/booking/availability - get doctors & free slots for a specialty and date
+// GET /api/booking/availability - Lấy danh sách bác sĩ & khung giờ trống theo chuyên khoa và ngày
 // query: chuyenKhoaId, date=YYYY-MM-DD
 router.get('/availability', async (req, res, next) => {
   try{
@@ -259,7 +270,7 @@ router.get('/availability', async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// POST /api/booking/appointments - create appointment
+// POST /api/booking/appointments - Tạo lịch khám (cho bản thân hoặc người thân)
 router.post('/appointments', auth, async (req, res, next) => {
   try{
     const { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio } = req.body || {};
@@ -353,7 +364,7 @@ router.post('/appointments', auth, async (req, res, next) => {
   }
 });
 
-// POST /api/booking/appointments/:id/pay - mark as paid and issue queue number
+// POST /api/booking/appointments/:id/pay - Xác nhận đã thanh toán và cấp số thứ tự
 router.post('/appointments/:id/pay', async (req, res, next) => {
   try{
     const { id } = req.params;
@@ -387,7 +398,7 @@ router.post('/appointments/:id/pay', async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// GET /api/booking/appointments - list appointments (optional filters)
+// GET /api/booking/appointments - Liệt kê lịch khám (có bộ lọc tùy chọn)
 // query: date=YYYY-MM-DD, benhNhanId, bacSiId
 router.get('/appointments', async (req, res, next) => {
   try{
@@ -405,7 +416,7 @@ router.get('/appointments', async (req, res, next) => {
 });
 
 // GET /api/booking/doctor-appointments?bacSiId=...&date=YYYY-MM-DD
-// Trả về danh sách lịch khám của 1 bác sĩ theo ngày (dành cho reception / admin / chính bác sĩ)
+// Mô tả: Trả về danh sách lịch khám của 1 bác sĩ theo ngày (dành cho reception/admin; có thể mở rộng cho bác sĩ)
 router.get('/doctor-appointments', auth, async (req, res, next) => {
   try {
     const { bacSiId, date } = req.query;
@@ -438,7 +449,7 @@ router.get('/doctor-appointments', auth, async (req, res, next) => {
 });
 
 // PUT /api/booking/appointments/:id/time  { khungGio, date }
-// Chỉnh sửa khung giờ hoặc ngày khám (chỉ admin / reception)
+// Mô tả: Chỉnh sửa khung giờ hoặc ngày khám (chỉ admin/reception)
 router.put('/appointments/:id/time', auth, async (req,res,next)=>{
   try {
     if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền sửa lịch khám' });
@@ -464,7 +475,7 @@ router.put('/appointments/:id/time', auth, async (req,res,next)=>{
 });
 
 // PUT /api/booking/appointments/:id/reassign { bacSiId, khungGio?, date? }
-// Đổi bác sĩ và/hoặc giờ khám (admin / reception)
+// Mô tả: Đổi bác sĩ và/hoặc giờ khám (admin/reception)
 router.put('/appointments/:id/reassign', auth, async (req,res,next)=>{
   try {
     if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền đổi bác sĩ/giờ' });

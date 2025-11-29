@@ -10,6 +10,11 @@ const destDir = path.join(__dirname, '..', 'uploads', 'avatars');
 fs.mkdirSync(destDir, { recursive: true });
 
 router.post('/image', (req, res) => {
+  // ===== Upload ảnh đại diện =====
+  // Endpoint: POST /api/uploads/image
+  // - Chỉ chấp nhận file ảnh (jpeg/png/gif/webp/bmp/svg+xml)
+  // - Giới hạn 1 file, tối đa 5MB
+  // - Trả về `url` tương đối để client sử dụng hiển thị
   const bb = Busboy({ headers: req.headers, limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
   let savedFilePath = null;
   let responded = false;
@@ -27,6 +32,7 @@ router.post('/image', (req, res) => {
       file.resume();
       return safeRespond(400, { message: 'Chỉ cho phép upload ảnh' });
     }
+    // Tạo tên file ngẫu nhiên theo đuôi file gốc
     const ext = path.extname(filename || '').toLowerCase() || '.jpg';
     const base = crypto.randomUUID ? crypto.randomUUID() : (Date.now() + '-' + Math.round(Math.random() * 1e9));
     const finalName = `${base}${ext}`;

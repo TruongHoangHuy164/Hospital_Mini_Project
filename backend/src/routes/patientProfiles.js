@@ -1,3 +1,4 @@
+// Router quản lý hồ sơ người thân (PatientProfile) cho người dùng
 const express = require('express');
 const PatientProfile = require('../models/PatientProfile');
 const auth = require('../middlewares/auth');
@@ -5,7 +6,7 @@ const asyncHandler = require('express-async-handler');
 
 const router = express.Router();
 
-// Chuẩn hoá số điện thoại (cơ bản: bỏ khoảng trắng, giữ nguyên ký tự số và + nếu đầu)
+// Chuẩn hoá số điện thoại (cơ bản: bỏ khoảng trắng, giữ số và dấu + đầu)
 function normalizePhone(raw){
   if(!raw) return '';
   const t = String(raw).trim();
@@ -14,7 +15,7 @@ function normalizePhone(raw){
   return cleaned;
 }
 
-// @desc    Lấy tất cả hồ sơ của người dùng đang đăng nhập
+// @desc    Lấy tất cả hồ sơ người thân của người dùng đang đăng nhập
 // @route   GET /api/patient-profiles
 // @access  Private
 router.get(
@@ -28,7 +29,7 @@ router.get(
   })
 );
 
-// @desc    Tạo hồ sơ bệnh nhân mới
+// @desc    Tạo hồ sơ người thân mới
 // @route   POST /api/patient-profiles
 // @access  Private
 router.post(
@@ -93,7 +94,7 @@ router.post(
   })
 );
 
-// @desc    Lấy chi tiết hồ sơ theo ID
+// @desc    Lấy chi tiết hồ sơ người thân theo ID
 // @route   GET /api/patient-profiles/:id
 // @access  Private
 router.get(
@@ -111,7 +112,7 @@ router.get(
   })
 );
 
-// @desc    Cập nhật hồ sơ
+// @desc    Cập nhật hồ sơ người thân
 // @route   PUT /api/patient-profiles/:id
 // @access  Private
 router.put(
@@ -172,7 +173,7 @@ router.put(
   })
 );
 
-// @desc    Xóa hồ sơ
+// @desc    Xóa hồ sơ người thân
 // @route   DELETE /api/patient-profiles/:id
 // @access  Private
 router.delete(

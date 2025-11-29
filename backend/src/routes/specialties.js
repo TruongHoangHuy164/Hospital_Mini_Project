@@ -3,6 +3,10 @@ const ChuyenKhoa = require('../models/ChuyenKhoa');
 
 const router = express.Router();
 
+// ===== Quản lý Chuyên khoa (ChuyenKhoa) =====
+// Lưu ý quyền: tạo/sửa/xóa chỉ dành cho người dùng `admin`.
+// Các API hỗ trợ tìm kiếm (`q`) và phân trang (`page`, `limit`).
+
 // List specialties with pagination/search
 router.get('/', async (req, res, next) => {
   try {
@@ -23,6 +27,8 @@ router.get('/', async (req, res, next) => {
 router.post('/', async (req, res, next) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try {
+    // Body: { ten, moTa? }
+    // - Bắt buộc: `ten`
     const { ten, moTa } = req.body || {};
     if (!ten) return res.status(400).json({ message: 'Thiếu tên chuyên khoa' });
     const created = await ChuyenKhoa.create({ ten, moTa });
@@ -34,6 +40,8 @@ router.post('/', async (req, res, next) => {
 router.put('/:id', async (req, res, next) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try {
+    // Body: { ten?, moTa? }
+    // - Cập nhật các trường được truyền vào
     const { ten, moTa } = req.body || {};
     const updated = await ChuyenKhoa.findByIdAndUpdate(req.params.id, { ten, moTa }, { new: true });
     if (!updated) return res.status(404).json({ message: 'Không tìm thấy' });
@@ -45,6 +53,7 @@ router.put('/:id', async (req, res, next) => {
 router.delete('/:id', async (req, res, next) => {
   if (req.user?.role !== 'admin') return res.status(403).json({ message: 'Forbidden' });
   try {
+    // Xóa chuyên khoa theo `id`
     const deleted = await ChuyenKhoa.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Không tìm thấy' });
     res.json({ message: 'Đã xóa' });

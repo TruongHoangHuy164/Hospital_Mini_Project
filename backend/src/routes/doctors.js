@@ -1,12 +1,16 @@
+// Router quản lý bác sĩ
 const express = require('express');
 const mongoose = require('mongoose');
+// Model bác sĩ
 const BacSi = require('../models/BacSi');
+// Model phòng khám (liên kết với bác sĩ qua phongKhamId)
 const PhongKham = require('../models/PhongKham');
+// Model người dùng (dùng để cấp tài khoản cho bác sĩ)
 const User = require('../models/User');
 
 const router = express.Router();
 
-// List doctors with pagination/search/filter
+// Liệt kê bác sĩ với phân trang/tìm kiếm/lọc
 // GET /api/doctors?page=1&limit=10&q=&chuyenKhoa=&phongKhamId=
 router.get('/', async (req, res, next) => {
   try {
@@ -38,7 +42,7 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// Create doctor
+// Tạo mới bác sĩ
 // POST /api/doctors
 router.post('/', async (req, res, next) => {
   try {
@@ -49,7 +53,7 @@ router.post('/', async (req, res, next) => {
     if (!mongoose.isValidObjectId(body.phongKhamId)) {
       return res.status(400).json({ message: 'phongKhamId không hợp lệ' });
     }
-    // Ensure clinic exists
+    // Đảm bảo phòng khám tồn tại
     const pk = await PhongKham.findById(body.phongKhamId);
     if (!pk) return res.status(400).json({ message: 'Phòng khám không tồn tại' });
 
@@ -57,7 +61,7 @@ router.post('/', async (req, res, next) => {
       const bs = await BacSi.create(body);
       return res.status(201).json(bs);
     } catch (err) {
-      // Duplicate key (email, maSo, userId)
+      // Lỗi trùng khóa (email, maSo, userId)
       if (err.code === 11000) {
         const dupFields = Object.keys(err.keyPattern || {});
         return res.status(409).json({ message: `Giá trị đã tồn tại ở trường: ${dupFields.join(', ')}` });
@@ -65,14 +69,14 @@ router.post('/', async (req, res, next) => {
       if (err.name === 'ValidationError') {
         return res.status(400).json({ message: err.message });
       }
-      throw err; // Let global handler log unexpected
+      throw err; // Để handler toàn cục xử lý và ghi log
     }
   } catch (err) {
     return next(err);
   }
 });
 
-// Get by id
+// Lấy thông tin bác sĩ theo id
 router.get('/:id', async (req, res, next) => {
   try {
     const bs = await BacSi.findById(req.params.id).populate('phongKhamId', 'tenPhong chuyenKhoa').populate('userId', 'email role');
@@ -81,7 +85,7 @@ router.get('/:id', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
-// Update
+// Cập nhật thông tin bác sĩ
 router.put('/:id', async (req, res, next) => {
   try {
     const body = req.body || {};
@@ -91,7 +95,7 @@ router.put('/:id', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
-// Delete
+// Xóa bác sĩ
 router.delete('/:id', async (req, res, next) => {
   try {
     const bs = await BacSi.findByIdAndDelete(req.params.id);
@@ -100,7 +104,7 @@ router.delete('/:id', async (req, res, next) => {
   } catch (err) { return next(err); }
 });
 
-// Provision user account for doctor using doctor's email and default password
+// Cấp tài khoản người dùng cho bác sĩ dựa trên email và mật khẩu mặc định
 // POST /api/doctors/:id/provision-account
 router.post('/:id/provision-account', async (req, res, next) => {
   try {
@@ -112,7 +116,7 @@ router.post('/:id/provision-account', async (req, res, next) => {
     const email = bs.email; // BacSi schema lowercases email
     const password = '123456';
 
-    // Ensure email is not already used
+    // Đảm bảo email chưa được sử dụng
     const exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ message: 'Email đã tồn tại' });
 

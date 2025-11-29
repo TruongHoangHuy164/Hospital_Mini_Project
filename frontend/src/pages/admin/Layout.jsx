@@ -23,6 +23,7 @@ export default function AdminLayout() {
               <li className="nav-item"><Link to="/admin/services" className="nav-link">Dịch vụ & Bảng giá</Link></li>
               <li className="nav-item"><Link to="/admin/staff" className="nav-link">Quản lý nhân viên (Lễ tân/CLS/Thu ngân/Điều dưỡng)</Link></li>
               <li className="nav-item"><Link to="/admin/work-schedules" className="nav-link">Lịch làm việc</Link></li>
+              <li className="nav-item"><Link to="/admin/revenue" className="nav-link">Báo cáo doanh thu</Link></li>
               <li className="nav-item mt-2"><button className="btn btn-outline-secondary w-100" onClick={onLogout}><i className="bi bi-box-arrow-right"></i> Đăng xuất</button></li>
             </ul>
           </div>

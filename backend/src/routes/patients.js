@@ -1,3 +1,4 @@
+// Router tìm kiếm và quản lý bệnh nhân (BenhNhan) và hồ sơ người thân (PatientProfile)
 const express = require('express');
 const Patient = require('../models/BenhNhan');
 const PatientProfile = require('../models/PatientProfile');
@@ -5,7 +6,7 @@ const User = require('../models/User');
 
 const router = express.Router();
 
-// Simple role check: allow admin or reception (adjust to your auth schema)
+// Kiểm tra quyền đơn giản: chỉ cho admin hoặc lễ tân (reception)
 function requireReceptionOrAdmin(req, res, next){
   if(!req.user) return res.status(401).json({ message: 'Unauthorized' });
   if(req.user.role === 'admin' || req.user.role === 'reception') return next();
@@ -13,6 +14,7 @@ function requireReceptionOrAdmin(req, res, next){
 }
 
 // GET /api/patients/search?q=...&limit=20
+// Mô tả: Tìm kiếm bệnh nhân theo tên/SĐT/địa chỉ/BHYT và cả hồ sơ người thân.
 router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
   try {
     const q = (req.query.q || '').trim();
@@ -33,7 +35,7 @@ router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
       .sort({ hoTen: 1 })
       .lean();
 
-    // Also search PatientProfile (profiles created by users) so receptionist can find profiles
+    // Tìm cả PatientProfile (hồ sơ người thân do user tạo) để lễ tân có thể tra cứu
     const profileOr = [];
     if(/^[0-9]+$/.test(q)) {
       profileOr.push({ soDienThoai: q }, { maHoSo: q });
@@ -48,7 +50,7 @@ router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
       .sort({ hoTen: 1 })
       .lean();
 
-    // If matched patients have associated user accounts, fetch their created profiles (người thân)
+    // Nếu bệnh nhân có liên kết tài khoản user, lấy các hồ sơ người thân do họ tạo
     const userIds = Array.from(new Set(docs.map(d => d.userId).filter(Boolean)));
     let profilesByUser = {};
     if (userIds.length > 0) {
@@ -63,14 +65,14 @@ router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
       }, {});
     }
 
-    // attach relatives array to each patient result
+    // Gắn danh sách người thân vào kết quả bệnh nhân
     const results = docs.map(d => ({
       ...d,
       _type: 'benhNhan',
       relatives: d.userId ? (profilesByUser[String(d.userId)] || []) : [],
     }));
 
-    // Map profiles as search results too, mark type so frontend can link to hoSoBenhNhanId
+    // Chuyển profile thành kết quả tìm kiếm, đánh dấu _type để frontend xử lý liên kết
     const profileResults = profiles.map(p => ({
       _id: p._id,
       hoTen: p.hoTen,
@@ -83,7 +85,7 @@ router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
       _type: 'profile'
     }));
 
-    // Combine results: prefer benhNhan matches first, then profiles (dedupe by name+phone)
+    // Gộp kết quả: ưu tiên BenhNhan, sau đó là Profile, loại trùng theo tên+SĐT
     const combined = [...results];
     // Simple dedupe: avoid adding a profile if there's already a benhNhan with same phone or name
     const seen = new Set(results.map(r => `${r.soDienThoai || ''}::${(r.hoTen||'').toLowerCase()}`));
@@ -97,7 +99,7 @@ router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
 });
 
 // GET /api/patients/user-by-contact?contact=...
-// Check if a user account exists by phone or email and return related info
+// Mô tả: Kiểm tra tồn tại tài khoản theo SĐT hoặc email và trả thông tin liên quan
 router.get('/user-by-contact', requireReceptionOrAdmin, async (req, res, next) => {
   try {
     let { contact } = req.query || {};
@@ -131,7 +133,7 @@ router.get('/user-by-contact', requireReceptionOrAdmin, async (req, res, next) =
 });
 
 // POST /api/patients/provision-user { name?, phone?, email? }
-// Create a basic user account for the provided phone or email with default password and a basic Patient (self) if missing
+// Mô tả: Cấp tài khoản cơ bản theo SĐT/email với mật khẩu mặc định và tạo BenhNhan (self) nếu thiếu
 router.post('/provision-user', requireReceptionOrAdmin, async (req, res, next) => {
   try {
     const { name, phone, email } = req.body || {};
@@ -186,7 +188,7 @@ router.post('/provision-user', requireReceptionOrAdmin, async (req, res, next) =
   }
 });
 
-// POST /api/patients/:userId/profiles - create a PatientProfile on behalf of a user
+// POST /api/patients/:userId/profiles - Tạo hồ sơ người thân (PatientProfile) thay mặt user
 router.post('/:userId/profiles', requireReceptionOrAdmin, async (req, res, next) => {
   try {
     const { userId } = req.params;
@@ -239,6 +241,7 @@ router.post('/:userId/profiles', requireReceptionOrAdmin, async (req, res, next)
 });
 
 // GET /api/patients/:id
+// Mô tả: Lấy chi tiết bệnh nhân theo id, kèm danh sách người thân nếu có.
 router.get('/:id', requireReceptionOrAdmin, async (req, res, next) => {
   try {
     const doc = await Patient.findById(req.params.id).select('-__v').lean();
@@ -258,7 +261,7 @@ router.get('/:id', requireReceptionOrAdmin, async (req, res, next) => {
   } catch(err){ next(err); }
 });
 
-// GET /api/patients?q=... - Public search for patients (used by doctor for history search)
+// GET /api/patients?q=... - Tìm kiếm công khai cho bác sĩ tra cứu lịch sử
 router.get('/', async (req, res, next) => {
   try {
     const q = (req.query.q || '').trim();

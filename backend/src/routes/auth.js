@@ -1,14 +1,18 @@
+// Router xác thực và khôi phục mật khẩu
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
+// Model người dùng
 const User = require('../models/User');
 
 // Helpers
+// Tạo tokenId ngẫu nhiên để gắn vào refresh token (phục vụ thu hồi/rotate)
 function newTokenId() {
   return crypto.randomBytes(24).toString('hex');
 }
 
+// Lấy secret cho JWT access/refresh; nếu thiếu JWT_SECRET sẽ throw lỗi cấu hình
 function getJwtSecrets() {
   const accessSecret = process.env.JWT_SECRET;
   const refreshSecret = process.env.JWT_REFRESH_SECRET || accessSecret;
@@ -20,6 +24,7 @@ function getJwtSecrets() {
 
 const router = express.Router();
 
+// Ký access token chứa thông tin cơ bản của user
 function signAccessToken(user) {
   const payload = { id: user._id, email: user.email, phone: user.phone, name: user.name, role: user.role };
   const { accessSecret: secret } = getJwtSecrets();
@@ -27,6 +32,7 @@ function signAccessToken(user) {
   return jwt.sign(payload, secret, { expiresIn });
 }
 
+// Ký refresh token (ít thông tin), chứa sub (userId) và tid (tokenId)
 function signRefreshToken(user, tokenId) {
   const payload = { sub: user._id.toString(), tid: tokenId };
   const { refreshSecret: secret } = getJwtSecrets();
@@ -35,6 +41,7 @@ function signRefreshToken(user, tokenId) {
 }
 
 // POST /api/auth/register
+// Mô tả: Đăng ký tài khoản mới bằng name, password và (email hoặc phone). Trả về access/refresh token.
 router.post('/register', async (req, res, next) => {
   try {
     const { name, email, phone, password } = req.body || {};
@@ -42,7 +49,7 @@ router.post('/register', async (req, res, next) => {
       return res.status(400).json({ message: 'Thiếu name, password và (email hoặc phone)' });
     }
 
-    // Normalize phone: remove non-digits
+    // Chuẩn hóa số điện thoại: loại bỏ ký tự không phải số
     let phoneNorm = null;
     if (phone) phoneNorm = String(phone).replace(/[^0-9+]/g, '');
 
@@ -72,6 +79,7 @@ router.post('/register', async (req, res, next) => {
 });
 
 // POST /api/auth/login
+// Mô tả: Đăng nhập bằng email/phone/identifier + password. Kiểm tra khóa tài khoản, trả về access/refresh token.
 router.post('/login', async (req, res, next) => {
   try {
     const { email, phone, identifier, password } = req.body || {};
@@ -123,6 +131,7 @@ router.post('/login', async (req, res, next) => {
 });
 
 // POST /api/auth/refresh
+// Mô tả: Làm mới access token bằng refresh token (verify + rotate tid).
 router.post('/refresh', async (req, res, next) => {
   try {
     const { refreshToken } = req.body || {};
@@ -155,6 +164,7 @@ router.post('/refresh', async (req, res, next) => {
 });
 
 // POST /api/auth/logout
+// Mô tả: Thu hồi refresh token hiện tại (nếu hợp lệ) và trả về trạng thái đăng xuất.
 router.post('/logout', async (req, res, next) => {
   try {
     const { refreshToken } = req.body || {};
@@ -178,6 +188,7 @@ router.post('/logout', async (req, res, next) => {
 });
 
 // OTP helpers
+// Sinh OTP số, đệm đầu bằng 0 nếu cần
 function generateOTP(length = 6) {
   // Returns zero-padded numeric OTP
   return String(Math.floor(Math.random() * Math.pow(10, length))).padStart(length, '0');
@@ -185,7 +196,7 @@ function generateOTP(length = 6) {
 const { sendEmailOTP, sendSmsOTP } = require('../services/otpSender');
 
 // POST /api/auth/forgot-password  { identifier }
-// identifier: email hoặc phone. Nếu tồn tại sẽ gửi OTP (6 số) qua kênh tương ứng.
+// Mô tả: Nhận email hoặc số điện thoại; nếu tài khoản tồn tại thì gửi OTP 6 số qua email/SMS.
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const { identifier } = req.body || {};
@@ -226,6 +237,7 @@ router.post('/forgot-password', async (req, res, next) => {
 });
 
 // POST /api/auth/reset-password { identifier, otp, password }
+// Mô tả: Xác thực OTP đã gửi và đặt lại mật khẩu mới; tránh double-hash bằng cách để pre-save hook xử lý.
 router.post('/reset-password', async (req, res, next) => {
   try {
     const { identifier, otp, password } = req.body || {};
@@ -251,7 +263,7 @@ router.post('/reset-password', async (req, res, next) => {
     }
 
     // Ghi trực tiếp mật khẩu mới (plaintext) để pre-save hook tự hash.
-    // Tránh double-hash (trước đây đã hash thủ công rồi lại bị hook hash lần nữa làm sai mật khẩu).
+    // Tránh double-hash (đã từng hash thủ công rồi bị hook hash lần nữa làm sai mật khẩu).
     user.password = password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;

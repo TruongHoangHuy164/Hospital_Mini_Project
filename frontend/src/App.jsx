@@ -30,6 +30,7 @@ import AdminServicesPage from './pages/admin/service/Index'
 import StaffIndex from './pages/admin/staff/Index'
 import StaffEdit from './pages/admin/staff/Edit'
 import AdminWorkSchedulesPage from './pages/admin/schedule/Index'
+import Revenue from './pages/admin/Revenue'
 import SiteLayout from './layouts/SiteLayout'
 import RequireDoctor from './pages/doctor/RequireDoctor'
 import DoctorLayout from './pages/doctor/Layout'
@@ -130,6 +131,7 @@ export default function App() {
         <Route path="staff" element={<StaffIndex />} />
         <Route path="staff/:id" element={<StaffEdit />} />
   <Route path="work-schedules" element={<AdminWorkSchedulesPage />} />
+        <Route path="revenue" element={<Revenue />} />
       </Route>
 
       <Route path="/doctor" element={<RequireDoctor><DoctorLayout /></RequireDoctor>}>

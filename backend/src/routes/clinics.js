@@ -1,9 +1,11 @@
+// Router quản lý phòng khám (Clinics)
 const express = require('express');
 const PhongKham = require('../models/PhongKham');
 
 const router = express.Router();
 
 // GET /api/clinics?q=&limit=&page=
+// Mô tả: Liệt kê phòng khám với phân trang, tìm kiếm theo tên phòng/chuyên khoa, lọc theo chuyenKhoaId.
 router.get('/', async (req, res, next) => {
   try {
     const page = Math.max(parseInt(req.query.page || '1', 10), 1);
@@ -22,6 +24,7 @@ router.get('/', async (req, res, next) => {
 });
 
 // POST /api/clinics
+// Mô tả: Tạo phòng khám mới với tên phòng và chuyên khoa.
 router.post('/', async (req, res, next) => {
   try {
     const { tenPhong, chuyenKhoa, chuyenKhoaId } = req.body || {};
@@ -32,6 +35,7 @@ router.post('/', async (req, res, next) => {
 });
 
 // PUT /api/clinics/:id
+// Mô tả: Cập nhật thông tin phòng khám theo id.
 router.put('/:id', async (req, res, next) => {
   try {
     const { tenPhong, chuyenKhoa, chuyenKhoaId } = req.body || {};
@@ -44,6 +48,7 @@ router.put('/:id', async (req, res, next) => {
 });
 
 // DELETE /api/clinics/:id
+// Mô tả: Xóa phòng khám theo id.
 router.delete('/:id', async (req, res, next) => {
   try {
     const deleted = await PhongKham.findByIdAndDelete(req.params.id);

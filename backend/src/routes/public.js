@@ -23,6 +23,7 @@ router.get('/services', async (req, res, next) => {
 // GET /api/public/specialties
 router.get('/specialties', async (req, res, next) => {
   try{
+    // Danh sách chuyên khoa (không cần đăng nhập)
     const items = await ChuyenKhoa.find().sort({ ten: 1 });
     res.json(items);
   }catch(err){ next(err); }
@@ -93,6 +94,7 @@ router.get('/medicines/:id', async (req, res, next) => {
 // GET /api/public/medicine-categories
 router.get('/medicine-categories', async (req, res, next) => {
   try {
+    // Danh mục thuốc kèm số lượng thuốc trong mỗi danh mục
     const categories = await LoaiThuoc.find().sort({ ten: 1 });
     const countsAgg = await ThuocKho.aggregate([
       { $group: { _id: '$loaiThuoc', count: { $sum: 1 } } }

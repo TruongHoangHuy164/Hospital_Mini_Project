@@ -1,3 +1,4 @@
+// Router hiệu thuốc: xử lý đơn thuốc và quản lý kho
 const express = require('express');
 const router = express.Router();
 const auth = require('../middlewares/auth');
@@ -7,11 +8,11 @@ const CapThuoc = require('../models/CapThuoc');
 const ThuocKho = require('../models/ThuocKho');
 const LoaiThuoc = require('../models/LoaiThuoc');
 
-// All endpoints require authentication and pharmacy role
+// Tất cả endpoint yêu cầu đăng nhập và role 'pharmacy' (hoặc admin)
 router.use(auth);
 router.use(authorize('pharmacy', 'admin'));
 
-// Get pharmacy orders/prescriptions by status
+// Lấy đơn thuốc theo trạng thái
 // GET /api/pharmacy/orders?status=WAITING_FOR_MEDICINE|PAID|PREPARING|COMPLETED&day=YYYY-MM-DD
 router.get('/orders', async (req, res) => {
   try {
@@ -56,7 +57,7 @@ router.get('/orders', async (req, res) => {
   }
 });
 
-// Get pharmacy stats
+// Thống kê số lượng theo trạng thái
 // GET /api/pharmacy/stats?date=YYYY-MM-DD
 router.get('/stats', async (req, res) => {
   try {
@@ -88,7 +89,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// Pay for prescription: change from WAITING_FOR_MEDICINE to PAID
+// Xác nhận thanh toán đơn thuốc: chuyển từ WAITING_FOR_MEDICINE -> PAID
 // PATCH /api/pharmacy/orders/:id/pay
 router.patch('/orders/:id/pay', async (req, res) => {
   try {
@@ -107,7 +108,7 @@ router.patch('/orders/:id/pay', async (req, res) => {
   }
 });
 
-// Start preparing: change from PAID to PREPARING
+// Bắt đầu chuẩn bị thuốc: PAID -> PREPARING
 // PATCH /api/pharmacy/orders/:id/prepare
 router.patch('/orders/:id/prepare', async (req, res) => {
   try {
@@ -125,7 +126,7 @@ router.patch('/orders/:id/prepare', async (req, res) => {
   }
 });
 
-// Dispense/Complete: change from PREPARING to COMPLETED
+// Phát thuốc/Hoàn tất: PREPARING -> COMPLETED
 // PATCH /api/pharmacy/orders/:id/dispense
 router.patch('/orders/:id/dispense', async (req, res) => {
   try {
@@ -146,9 +147,9 @@ router.patch('/orders/:id/dispense', async (req, res) => {
 });
 
 module.exports = router;
-// Inventory management below
+// Quản lý kho thuốc bên dưới
 
-// List inventory with pagination, search, sort
+// Liệt kê kho thuốc với phân trang, tìm kiếm, sắp xếp
 router.get('/inventory', async (req, res) => {
   try {
     const {
@@ -186,7 +187,7 @@ router.get('/inventory', async (req, res) => {
   }
 });
 
-// Create a new item
+// Tạo thuốc/kho mục mới
 router.post('/inventory', async (req, res) => {
   try {
     const body = req.body || {};
@@ -197,7 +198,7 @@ router.post('/inventory', async (req, res) => {
   }
 });
 
-// Update an item
+// Cập nhật thuốc/kho mục
 router.put('/inventory/:id', async (req, res) => {
   try {
     const id = req.params.id;
@@ -209,7 +210,7 @@ router.put('/inventory/:id', async (req, res) => {
   }
 });
 
-// Delete an item
+// Xóa thuốc/kho mục
 router.delete('/inventory/:id', async (req, res) => {
   try {
     const id = req.params.id;
@@ -221,7 +222,7 @@ router.delete('/inventory/:id', async (req, res) => {
   }
 });
 
-// Import JSON array of items
+// Import danh sách JSON các mục kho
 router.post('/inventory/import', async (req, res) => {
   try {
     const data = req.body;
@@ -276,7 +277,7 @@ router.post('/inventory/import', async (req, res) => {
   }
 });
 
-// Categories CRUD
+// CRUD danh mục (loại thuốc)
 router.get('/categories', async (req, res) => {
   try {
     const categories = await LoaiThuoc.find({}).sort({ ten: 1 });
@@ -328,7 +329,7 @@ router.delete('/categories/:id', async (req, res) => {
   }
 });
 
-// Import into a specific category
+// Import vào một danh mục cụ thể
 router.post('/categories/:id/import', async (req, res) => {
   req.query.categoryId = req.params.id;
   return router.handle({ ...req, method: 'POST', url: '/inventory/import' }, res, () => {});

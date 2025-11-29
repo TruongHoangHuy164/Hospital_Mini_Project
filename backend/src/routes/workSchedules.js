@@ -1,3 +1,4 @@
+// Router quản lý lịch làm việc (tháng kế tiếp)
 const express = require('express');
 const WorkSchedule = require('../models/WorkSchedule');
 const User = require('../models/User');
@@ -6,9 +7,9 @@ const { generateAutoSchedule } = require('../services/autoScheduler');
 
 const router = express.Router();
 
-// Validate day string YYYY-MM-DD
+// Kiểm tra định dạng ngày YYYY-MM-DD
 function isDayStr(s){ return /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(s); }
-// Build month string range for lexicographic compare (YYYY-MM-DD)
+// Tạo khoảng ngày cho 1 tháng (YYYY-MM-DD) để so sánh
 function monthRange(month){
   if(!month) return null;
   const m = /^([0-9]{4})-([0-9]{2})$/.exec(month);
@@ -21,7 +22,7 @@ function monthRange(month){
   return { start, end };
 }
 
-// Helpers to restrict operations to ONLY next calendar month from 'now'
+// Helpers: giới hạn thao tác CHỈ cho tháng kế tiếp tính từ thời điểm hiện tại
 function getNextMonthYearMonth(){
   const now = new Date();
   const y = now.getFullYear();
@@ -36,7 +37,7 @@ function isInNextMonth(dayStr){
   return dayStr.slice(0,7) === getNextMonthYearMonth();
 }
 
-// Precompute once per process tick (acceptable; recompute if needed per request otherwise)
+// Kiểm tra và báo lỗi nếu ngày không thuộc tháng kế tiếp
 function assertNextMonth(dayStr){
   if(!isInNextMonth(dayStr)){
     const allowed = getNextMonthYearMonth();
@@ -46,8 +47,8 @@ function assertNextMonth(dayStr){
   }
 }
 
-// Ensure current date is on/after 15th of current month before allowing next-month modifications
-// Fetch config for next month; if not present fallback to 15th rule
+// Đảm bảo đã đến ngày mở đăng ký (mặc định ngày 15 của tháng hiện tại),
+// nếu có cấu hình ScheduleConfig cho tháng kế tiếp thì dùng openFrom từ đó
 async function ensureWindowOpenForUser(){
   // Admin always allowed
   if(thisReqUserRole() === 'admin') return;
@@ -65,13 +66,13 @@ async function ensureWindowOpenForUser(){
   }
 }
 
-// Hacky accessor to current request user role via closure injection later
+// Truy cập role của request hiện tại (thông qua biến closure đã được set)
 let _reqUser = null;
 function setReqUser(u){ _reqUser = u; }
 function thisReqUserRole(){ return _reqUser?.role; }
 
 // GET /api/work-schedules?month=YYYY-MM&role=&userId=
-// Trả về danh sách lịch của 1 tháng theo role hoặc user cụ thể
+// Mô tả: Trả về danh sách lịch làm việc theo tháng (lọc theo vai trò hoặc user cụ thể)
 router.get('/', async (req, res, next) => {
   try {
     const { month, role, userId } = req.query;
@@ -85,7 +86,7 @@ router.get('/', async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
-// POST /api/work-schedules - tạo 1 lịch
+// POST /api/work-schedules - Tạo 1 lịch làm việc
 router.post('/', async (req, res, next) => {
   try {
     setReqUser(req.user);
@@ -101,7 +102,7 @@ router.post('/', async (req, res, next) => {
     const user = await User.findById(userId).select('role');
     if(!user) return res.status(404).json({ message: 'User không tồn tại' });
     if(user.role !== role) return res.status(400).json({ message: 'role không khớp với user' });
-    // Allow admin to create for anyone. Also allow reception to create schedules for doctors.
+    // Quyền: admin tạo cho bất kỳ ai; lễ tân (reception) chỉ tạo lịch cho bác sĩ
     if(req.user.role !== 'admin'){
       if(req.user.role === 'reception'){
         // reception can only create schedules for users with role 'doctor'
@@ -118,7 +119,7 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// PUT /api/work-schedules/:id
+// PUT /api/work-schedules/:id - Cập nhật lịch làm việc
 router.put('/:id', async (req, res, next) => {
   try {
     setReqUser(req.user);
@@ -129,7 +130,7 @@ router.put('/:id', async (req, res, next) => {
     if(update.shift && !['sang','chieu','toi'].includes(update.shift)) return res.status(400).json({ message: 'shift không hợp lệ' });
     if(update.shiftType && !['lam_viec','truc','nghi'].includes(update.shiftType)) return res.status(400).json({ message: 'shiftType không hợp lệ' });
   if(update.day){ if(!isDayStr(update.day)) return res.status(400).json({ message: 'day không hợp lệ' }); }
-    // Fetch existing doc to enforce month rule even if day not changed
+    // Lấy bản ghi hiện tại để kiểm tra quy tắc tháng dù không đổi ngày
     const existing = await WorkSchedule.findById(req.params.id);
     if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
     const targetDay = update.day || existing.day;
@@ -147,7 +148,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// DELETE /api/work-schedules/:id
+// DELETE /api/work-schedules/:id - Xóa lịch làm việc
 router.delete('/:id', async (req, res, next) => {
   try {
     setReqUser(req.user);
@@ -163,6 +164,7 @@ router.delete('/:id', async (req, res, next) => {
 });
 
 // POST /api/work-schedules/bulk
+// Mô tả: Thêm/sửa nhiều lịch làm việc trong tháng kế tiếp.
 // body: { items: [ { userId, role, day, shift, shiftType, clinicId, reason, note, meta } ], upsert=true }
 router.post('/bulk', async (req, res, next) => {
   try {
@@ -190,7 +192,8 @@ router.post('/bulk', async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
-// GET /api/work-schedules/stats?month=YYYY-MM&role=doctor -> trả tổng số ca theo shiftType
+// GET /api/work-schedules/stats?month=YYYY-MM&role=doctor
+// Mô tả: Trả tổng số ca theo loại ca (shiftType) cho từng vai trò.
 router.get('/stats/summary', async (req, res, next) => {
   try {
     const { month, role } = req.query;
@@ -207,7 +210,7 @@ router.get('/stats/summary', async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
-// ===== Self view for current user =====
+// ===== Xem lịch của chính người dùng =====
 // GET /api/work-schedules/me?month=YYYY-MM
 router.get('/me/self', async (req, res, next) => {
   try {
@@ -221,7 +224,7 @@ router.get('/me/self', async (req, res, next) => {
   } catch(err){ return next(err); }
 });
 
-// DELETE /api/work-schedules/me/next  -> xóa toàn bộ lịch tháng kế tiếp của user hiện tại
+// DELETE /api/work-schedules/me/next  -> Xóa toàn bộ lịch tháng kế tiếp của user hiện tại
 router.delete('/me/next', async (req,res,next)=>{
   try {
     const userId = req.user?.id;
@@ -238,8 +241,8 @@ router.delete('/me/next', async (req,res,next)=>{
 });
 
 module.exports = router;
-// ===== Config endpoints (admin only should be enforced at app level authorize) =====
-// GET /api/work-schedules/config/next -> current config for next month
+// ===== Endpoint cấu hình (chỉ admin) =====
+// GET /api/work-schedules/config/next -> Lấy cấu hình tháng kế tiếp
 router.get('/config/next', async (req,res,next)=>{
   try {
     const nextMonth = getNextMonthYearMonth();
@@ -248,7 +251,7 @@ router.get('/config/next', async (req,res,next)=>{
   } catch(err){ next(err); }
 });
 
-// PUT /api/work-schedules/config/next { openFrom, note }
+// PUT /api/work-schedules/config/next { openFrom, note } -> Cập nhật cấu hình tháng kế tiếp
 router.put('/config/next', async (req,res,next)=>{
   try {
     if(req.user.role !== 'admin') return res.status(403).json({ message: 'Chỉ admin cấu hình' });
@@ -270,6 +273,7 @@ router.put('/config/next', async (req,res,next)=>{
 });
 
 // POST /api/work-schedules/auto-generate { dryRun=true, replaceExisting=false }
+// Mô tả: Admin tự động sinh lịch cho tháng kế tiếp theo quy tắc trong service.
 router.post('/auto-generate', async (req,res,next)=>{
   try {
     if(req.user.role !== 'admin') return res.status(403).json({ message: 'Chỉ admin thực hiện auto-generate' });

@@ -1,3 +1,4 @@
+// Router thanh toán (MoMo, tiền mặt) và tiện ích liên quan
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
@@ -9,8 +10,8 @@ const DichVu = require('../models/DichVu');
 const CanLamSang = require('../models/CanLamSang');
 const DonThuoc = require('../models/DonThuoc');
 
-// Lấy thông tin thanh toán theo id (chỉ auth)
-// Restrict :id to 24-hex ObjectId to avoid catching literal paths like 'services'
+// Lấy thông tin thanh toán theo id (chỉ người có quyền)
+// Lưu ý: hạn chế :id theo ObjectId 24-hex để tránh bắt nhầm đường dẫn literal như 'services'
 router.get('/:id([0-9a-fA-F]{24})', auth, authorize('reception','pharmacy','admin'), async (req, res, next) => {
   try {
     const p = await ThanhToan.findById(req.params.id);
@@ -31,7 +32,7 @@ router.get('/services', auth, authorize('reception','admin'), async (req, res, n
   } catch (err) { next(err); }
 });
 
-// Tạo payment request qua MoMo (chỉ cho các role có quyền tạo thu tiền: reception, pharmacy, admin)
+// Tạo payment request qua MoMo (chỉ role: reception, pharmacy, admin)
 router.post('/momo/create', auth, authorize('reception','pharmacy','admin'), async (req, res, next) => {
   try {
     const { hoSoKhamId, amount, returnUrl, notifyUrl, orderInfo, orderRefs, targetType } = req.body;
@@ -131,7 +132,7 @@ router.post('/momo/notify', async (req, res, next) => {
   }
 });
 
-// Fast return handler from redirect page (client posts query params here)
+// Xử lý trả về nhanh từ trang redirect (client POST params vào đây)
 // POST /api/payments/momo/return
 router.post('/momo/return', express.json(), async (req, res) => {
   try{
@@ -149,7 +150,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Invalid signature' });
     }
 
-    // Find payment record and update
+    // Tìm bản ghi thanh toán và cập nhật
     if(!orderId) return res.status(400).json({ ok:false, message: 'orderId missing' });
     const payment = await ThanhToan.findById(orderId);
     if(!payment) return res.status(404).json({ ok:false, message: 'Payment not found' });
@@ -183,7 +184,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
   }
 });
 
-// GET handler for MoMo redirect (use this as MOMO_RETURN_URL)
+// Xử lý bằng GET cho đường dẫn MoMo redirect (dùng làm MOMO_RETURN_URL)
 // GET /api/payments/momo/return-get
 router.get('/momo/return-get', async (req, res) => {
   try{
@@ -222,7 +223,7 @@ router.get('/momo/return-get', async (req, res) => {
   }
 });
 
-// Also accept GET on /momo/return since MoMo may redirect with GET to the configured return URL
+// Chấp nhận GET ở /momo/return (MoMo có thể redirect GET về URL đã cấu hình)
 router.get('/momo/return', async (req, res) => {
   try{
     const accessKey = process.env.MOMO_ACCESS_KEY || 'F8BBA842ECF85';
@@ -279,7 +280,7 @@ router.get('/momo/return', async (req, res) => {
   }
 });
 
-// Create cash payment (reception collects money directly)
+// Tạo thanh toán tiền mặt (lễ tân thu trực tiếp)
 router.post('/cash/create', auth, authorize('reception','admin'), async (req, res, next) => {
   try {
     const { hoSoKhamId, amount, orderRefs, targetType } = req.body || {};
@@ -310,7 +311,7 @@ router.post('/cash/create', auth, authorize('reception','admin'), async (req, re
   } catch (err) { next(err); }
 });
 
-// For reception UI: list CanLamSang (lab orders) for a given hoSoKhamId (unpaid only)
+// UI lễ tân: liệt kê chỉ định cận lâm sàng (CanLamSang) của một hồ sơ khám chưa thanh toán
 router.get('/canlamsang', auth, authorize('reception','admin'), async (req, res, next) => {
   try{
     const { hoSoKhamId } = req.query;
@@ -320,7 +321,7 @@ router.get('/canlamsang', auth, authorize('reception','admin'), async (req, res,
   }catch(err){ next(err); }
 });
 
-// List HoSoKham that have unpaid CanLamSang (for reception overview)
+// Liệt kê Hồ Sơ Khám có CanLamSang chưa thanh toán (tổng quan cho lễ tân)
 router.get('/unpaid-cases', auth, authorize('reception','admin'), async (req, res, next) => {
   try{
     const q = (req.query.q || '').trim();
