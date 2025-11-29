@@ -6,6 +6,8 @@ const User = require('../models/User');
 const BenhNhan = require('../models/BenhNhan');
 // Model Thanh Toán để tổng hợp doanh thu theo ngày
 const ThanhToan = require('../models/ThanhToan');
+// Model Lịch Khám để thống kê đặt lịch
+const LichKham = require('../models/LichKham');
 
 const router = express.Router();
 
@@ -83,6 +85,104 @@ router.get('/overview', async (req, res, next) => {
     });
   } catch (err) {
     // Chuyển lỗi cho middleware xử lý lỗi chung
+    return next(err);
+  }
+});
+
+// GET /api/admin/booking-stats
+// Thống kê người dùng đặt lịch:
+// Query params:
+// - year: năm (mặc định: năm hiện tại)
+// - month: tháng (1-12, tùy chọn). Nếu có -> trả về thêm mảng days.
+// - top: số lượng top người dùng đặt lịch nhiều nhất (mặc định 10)
+// Trả về:
+// {
+//   year, month?,
+//   totalBookings, uniqueUsers,
+//   statusBreakdown: { cho_thanh_toan, da_thanh_toan, da_kham },
+//   monthly: [ { month, count } ] (khi không truyền month)
+//   days: [ { day, count } ] (khi truyền month)
+//   topUsers: [ { userId, count, name, email } ],
+//   profileUsage: { withPatientProfile, withBenhNhan },
+// }
+router.get('/booking-stats', async (req, res, next) => {
+  try {
+    const now = new Date();
+    const year = parseInt(req.query.year, 10) || now.getFullYear();
+    const monthRaw = req.query.month;
+    const month = monthRaw ? parseInt(monthRaw, 10) : null; // 1-12
+    const top = Math.min(Math.max(parseInt(req.query.top, 10) || 10, 1), 50);
+
+    if (month && (month < 1 || month > 12)) {
+      return res.status(400).json({ message: 'Tháng không hợp lệ (1-12).' });
+    }
+
+    const start = month ? new Date(year, month - 1, 1) : new Date(year, 0, 1);
+    const end = month ? new Date(year, month, 1) : new Date(year + 1, 0, 1);
+
+    // Pipeline chung để lấy số liệu tổng hợp theo khoảng thời gian
+    const facets = {
+      totals: [
+        { $group: { _id: null, total: { $sum: 1 }, users: { $addToSet: '$nguoiDatId' } } },
+        { $project: { _id: 0, total: 1, uniqueUsers: { $size: '$users' } } },
+      ],
+      status: [
+        { $group: { _id: '$trangThai', count: { $sum: 1 } } },
+      ],
+      profileUsage: [
+        { $group: { _id: null,
+          withPatientProfile: { $sum: { $cond: [{ $ifNull: ['$hoSoBenhNhanId', false] }, 1, 0] } },
+          withBenhNhan: { $sum: { $cond: [{ $ifNull: ['$benhNhanId', false] }, 1, 0] } }
+        } },
+        { $project: { _id: 0, withPatientProfile: 1, withBenhNhan: 1 } }
+      ],
+      topUsers: [
+        { $group: { _id: '$nguoiDatId', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: top },
+        { $lookup: { from: 'users', localField: '_id', foreignField: '_id', as: 'user' } },
+        { $unwind: { path: '$user', preserveNullAndEmptyArrays: true } },
+        { $project: { _id: 0, userId: '$_id', count: 1, name: '$user.name', email: '$user.email' } },
+      ],
+    };
+
+    if (month) {
+      facets.days = [
+        { $group: { _id: { day: { $dayOfMonth: '$ngayKham' } }, count: { $sum: 1 } } },
+        { $project: { _id: 0, day: '$_id.day', count: 1 } },
+        { $sort: { day: 1 } }
+      ];
+    } else {
+      facets.monthly = [
+        { $group: { _id: { month: { $month: '$ngayKham' } }, count: { $sum: 1 } } },
+        { $project: { _id: 0, month: '$_id.month', count: 1 } },
+        { $sort: { month: 1 } }
+      ];
+    }
+
+    const agg = await LichKham.aggregate([
+      { $match: { ngayKham: { $gte: start, $lt: end } } },
+      { $facet: facets }
+    ]);
+
+    const data = agg[0] || {};
+    const totals = data.totals && data.totals[0] ? data.totals[0] : { total: 0, uniqueUsers: 0 };
+    const statusBreakdown = {};
+    (data.status || []).forEach(s => { statusBreakdown[s._id] = s.count; });
+
+    return res.json({
+      year,
+      month: month || undefined,
+      totalBookings: totals.total,
+      uniqueUsers: totals.uniqueUsers,
+      statusBreakdown,
+      monthly: data.monthly || undefined,
+      days: data.days || undefined,
+      topUsers: data.topUsers || [],
+      profileUsage: (data.profileUsage && data.profileUsage[0]) || { withPatientProfile: 0, withBenhNhan: 0 },
+      period: { from: start.toISOString(), to: end.toISOString() }
+    });
+  } catch (err) {
     return next(err);
   }
 });

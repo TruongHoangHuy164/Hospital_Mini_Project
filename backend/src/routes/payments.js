@@ -280,34 +280,112 @@ router.get('/momo/return', async (req, res) => {
   }
 });
 
-// Tạo thanh toán tiền mặt (lễ tân thu trực tiếp)
-router.post('/cash/create', auth, authorize('reception','admin'), async (req, res, next) => {
+// Tạo thanh toán tiền mặt (lễ tân / nhà thuốc thu trực tiếp)
+// Cho phép targetType = 'canlamsang' | 'donthuoc' | 'hosokham'
+router.post('/cash/create', auth, authorize('reception','pharmacy','admin'), async (req, res, next) => {
   try {
     const { hoSoKhamId, amount, orderRefs, targetType } = req.body || {};
-    if (!hoSoKhamId || !amount) return res.status(400).json({ error: 'hoSoKhamId và amount là bắt buộc' });
+    if (!hoSoKhamId || amount == null) return res.status(400).json({ error: 'hoSoKhamId và amount là bắt buộc' });
+    const soTien = Number(amount);
+    if (!Number.isFinite(soTien) || soTien <= 0) return res.status(400).json({ error: 'amount phải > 0' });
+
+    const tType = ['canlamsang','donthuoc','hosokham'].includes(targetType) ? targetType : 'hosokham';
 
     const payment = await ThanhToan.create({
       hoSoKhamId,
-      soTien: amount,
+      soTien,
       hinhThuc: 'tien_mat',
       status: 'da_thanh_toan',
       ngayThanhToan: new Date(),
-      targetType: targetType || 'canlamsang',
+      targetType: tType,
       orderRefs: Array.isArray(orderRefs) ? orderRefs : (orderRefs ? [orderRefs] : []),
-      rawResponse: { collectedBy: req.user?._id }
+      rawResponse: { collectedBy: req.user?._id, method: 'cash' }
     });
 
-    // Update related entities immediately
-    try{
-      if(payment.targetType === 'canlamsang' && payment.orderRefs.length){
+    // Cập nhật thực thể liên quan
+    try {
+      if (payment.targetType === 'canlamsang' && payment.orderRefs.length) {
         await CanLamSang.updateMany({ _id: { $in: payment.orderRefs } }, { $set: { daThanhToan: true } });
       }
-      if(payment.targetType === 'donthuoc' && payment.orderRefs.length){
+      if (payment.targetType === 'donthuoc' && payment.orderRefs.length) {
         await DonThuoc.updateMany({ _id: { $in: payment.orderRefs } }, { $set: { status: 'pending_pharmacy' } });
       }
-    }catch(e){ console.error('Error updating related entities for cash payment', e); }
+    } catch (e) { console.error('Error updating related entities for cash payment', e); }
 
-    res.json(payment);
+    return res.json(payment);
+  } catch (err) { next(err); }
+});
+
+// Thanh toán toa thuốc (đơn thuốc) bằng MoMo: tạo payment cho DonThuoc
+// POST /api/payments/prescription/:id/momo
+router.post('/prescription/:id/momo', auth, authorize('pharmacy','reception','admin'), async (req,res,next)=>{
+  try {
+    const { id } = req.params;
+    const { amount, returnUrl, notifyUrl, orderInfo } = req.body || {};
+    if (!amount) return res.status(400).json({ error: 'amount là bắt buộc' });
+    const don = await DonThuoc.findById(id).populate('hoSoKhamId');
+    if (!don) return res.status(404).json({ error: 'Đơn thuốc không tồn tại' });
+    const hoSoKhamId = don.hoSoKhamId?._id;
+    if (!hoSoKhamId) return res.status(400).json({ error: 'Đơn thuốc thiếu hoSoKhamId' });
+
+    // Tạo trước bản ghi thanh toán
+    const payment = await ThanhToan.create({
+      hoSoKhamId,
+      soTien: Number(amount),
+      hinhThuc: 'momo',
+      status: 'cho_xu_ly',
+      targetType: 'donthuoc',
+      orderRefs: [don._id],
+    });
+
+    const requestId = uuidv4();
+    const orderId = String(payment._id);
+    try {
+      const baseUrl = process.env.SERVER_BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const returnUrlFinal = returnUrl || process.env.MOMO_RETURN_URL || `${baseUrl}/api/payments/momo/return`;
+      const notifyUrlFinal = notifyUrl || process.env.MOMO_NOTIFY_URL || `${baseUrl}/api/payments/momo/notify`;
+      const resp = await momoService.createPayment({
+        amount: Number(amount),
+        orderId,
+        orderInfo: orderInfo || `Thanh toan don thuoc ${don._id}`,
+        returnUrl: returnUrlFinal,
+        notifyUrl: notifyUrlFinal,
+        requestId,
+        extraData: JSON.stringify({ prescriptionId: don._id, createdBy: req.user?._id })
+      });
+      payment.momoTransactionId = resp.transId || resp.requestId || null;
+      payment.rawResponse = resp;
+      await payment.save();
+      return res.json({ paymentId: payment._id, momo: resp });
+    } catch (err) {
+      console.error('MoMo prescription create error', err);
+      return res.status(500).json({ error: 'Tạo giao dịch MoMo thất bại', detail: err?.response?.data || err.message });
+    }
+  } catch (err) { next(err); }
+});
+
+// Thanh toán toa thuốc bằng tiền mặt
+// POST /api/payments/prescription/:id/cash
+router.post('/prescription/:id/cash', auth, authorize('pharmacy','reception','admin'), async (req,res,next)=>{
+  try {
+    const { id } = req.params; const { amount } = req.body || {};
+    if(!amount) return res.status(400).json({ error: 'amount là bắt buộc' });
+    const don = await DonThuoc.findById(id).populate('hoSoKhamId');
+    if(!don) return res.status(404).json({ error: 'Đơn thuốc không tồn tại' });
+    const hoSoKhamId = don.hoSoKhamId?._id;
+    if(!hoSoKhamId) return res.status(400).json({ error: 'Đơn thuốc thiếu hoSoKhamId' });
+    const payment = await ThanhToan.create({
+      hoSoKhamId,
+      soTien: Number(amount),
+      hinhThuc: 'tien_mat',
+      status: 'da_thanh_toan',
+      ngayThanhToan: new Date(),
+      targetType: 'donthuoc',
+      orderRefs: [don._id],
+      rawResponse: { collectedBy: req.user?._id, method: 'cash' }
+    });
+    try { await DonThuoc.updateOne({ _id: don._id }, { $set: { status: 'pending_pharmacy' } }); } catch(e){ console.error('Update DonThuoc after cash payment error', e); }
+    return res.json(payment);
   } catch (err) { next(err); }
 });
 

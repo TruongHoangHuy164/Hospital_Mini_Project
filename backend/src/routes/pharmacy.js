@@ -39,7 +39,7 @@ router.get('/orders', async (req, res) => {
       filter.ngayKeDon = { $gte: start, $lt: end };
     }
     
-    const orders = await DonThuoc.find(filter)
+    let orders = await DonThuoc.find(filter)
       .populate({
         path: 'hoSoKhamId',
         select: 'benhNhanId bacSiId trangThai createdAt',
@@ -48,10 +48,29 @@ router.get('/orders', async (req, res) => {
           { path: 'bacSiId', select: 'hoTen' }
         ]
       })
+      .populate({
+        path: 'items.thuocId',
+        select: 'gia ten_san_pham don_vi'
+      })
       .sort({ createdAt: -1 })
       .limit(200);
+
+    // Chuyển sang plain object và tính tổng tiền đơn (tongTien)
+    const ordersWithTotal = orders.map(o => {
+      const doc = o.toObject({ virtuals: true });
+      let total = 0;
+      if (Array.isArray(doc.items)) {
+        doc.items.forEach(it => {
+          const gia = (it.thuocId && typeof it.thuocId.gia === 'number') ? it.thuocId.gia : 0;
+          const qty = typeof it.soLuong === 'number' ? it.soLuong : 0;
+          total += gia * qty;
+        });
+      }
+      doc.tongTien = total;
+      return doc;
+    });
     
-    res.json(orders);
+    res.json(ordersWithTotal);
   } catch (err) {
     return res.status(500).json({ message: 'Lỗi server', error: err.message });
   }
