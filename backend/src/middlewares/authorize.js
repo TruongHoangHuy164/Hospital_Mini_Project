@@ -1,3 +1,4 @@
+// Middleware phân quyền: chỉ cho phép các vai trò nằm trong danh sách `allowed`
 function authorize(...allowed) {
   return (req, res, next) => {
     const user = req.user;
