@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useCallback, useRef, startTransition } from 'react';
 import { createMomoPayment, createCashPayment, getPayment } from '../../api/payments';
 import { privateApi } from '../../api/axios';
 
@@ -157,138 +157,159 @@ export default function ReceptionPayments(){
   },[paymentId, hoSoId]);
 
   return (
-    <div>
-      <h3>Thu tiền dịch vụ (MoMo)</h3>
-      {!hoSoId ? (
-        <div className="mb-3">
-          <h5>Hồ sơ có chỉ định chưa thanh toán</h5>
-          <div className="input-group mb-2" style={{maxWidth:500}}>
-            <input className="form-control" placeholder="Tìm theo tên hoặc sđt" value={caseSearch} onChange={e=>setCaseSearch(e.target.value)} />
-            <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases(caseSearch)}>Tìm</button>
-            <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases('')}>Tải lại</button>
-          </div>
-          {firstCase && (
-            <div className="card mb-2">
-              <div className="card-body d-flex justify-content-between align-items-center">
-                <div>
-                  <div><strong>{firstCase.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{firstCase.benhNhan?.soDienThoai || ''}</small></div>
-                  <div className="small text-muted">Chỉ định chưa thanh toán: {firstCase.count} — Mã hồ sơ: {String(firstCase.hoSoKhamId)}</div>
+    <div className="py-3 px-3 bg-white">
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h1 className="h4 m-0"><i className="bi bi-cash-coin text-success me-2"></i>Thu tiền dịch vụ</h1>
+          <div className="small text-muted">MoMo hoặc tiền mặt · Lễ tân</div>
+        </div>
+        <div>
+          <span className="badge bg-primary-subtle text-primary border">Tổng hiện tại: {total.toLocaleString()} đ</span>
+        </div>
+      </div>
+
+      <div className="row g-3">
+        <div className="col-12 col-lg-4">
+          <div className="card shadow-sm">
+            <div className="card-header bg-light"><strong>Hồ sơ chưa thanh toán</strong></div>
+            <div className="card-body">
+              <div className="input-group mb-2">
+                <input className="form-control" placeholder="Tìm theo tên hoặc SĐT" value={caseSearch} onChange={e=>setCaseSearch(e.target.value)} />
+                <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases(caseSearch)}><i className="bi bi-search"></i></button>
+                <button className="btn btn-outline-secondary" onClick={()=>loadUnpaidCases('')}><i className="bi bi-arrow-clockwise"></i></button>
+              </div>
+              {firstCase && (
+                <div className="alert alert-info d-flex justify-content-between align-items-center">
+                  <div>
+                    <div className="fw-semibold">{firstCase.benhNhan?.hoTen || '—'} <small className="text-muted">{firstCase.benhNhan?.soDienThoai || ''}</small></div>
+                    <div className="small text-muted">Chỉ định chưa thanh toán: {firstCase.count}</div>
+                    <div className="small text-muted">Mã hồ sơ: {String(firstCase.hoSoKhamId)}</div>
+                  </div>
+                  <button className="btn btn-sm btn-primary" onClick={()=>{
+                    const id = String(firstCase.hoSoKhamId);
+                    startTransition(() => { setHoSoId(id); });
+                    loadLabOrders(id).then(()=>{ ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+                  }}>Xem chỉ định</button>
                 </div>
-                <div>
-                  <button className="btn btn-primary" onClick={async ()=>{ setHoSoId(String(firstCase.hoSoKhamId)); await loadLabOrders(String(firstCase.hoSoKhamId)); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Xem chỉ định</button>
-                </div>
+              )}
+              <div className="list-group" style={{maxHeight:450, overflow:'auto'}}>
+                {unpaidCases.map(c => (
+                  <button type="button" key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action d-flex justify-content-between align-items-center ${hoSoId===String(c.hoSoKhamId)?'active':''}`} onClick={()=>{
+                    const id = String(c.hoSoKhamId);
+                    startTransition(() => { setHoSoId(id); });
+                    loadLabOrders(id).then(()=>{ ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+                  }}>
+                    <div>
+                      <div className="fw-semibold">{c.benhNhan?.hoTen || '—'} <small className="text-muted">{c.benhNhan?.soDienThoai || ''}</small></div>
+                      <div className="small text-muted">Mã hồ sơ: {String(c.hoSoKhamId)}</div>
+                    </div>
+                    <span className="badge bg-secondary">{c.count}</span>
+                  </button>
+                ))}
+                {unpaidCases.length===0 && <div className="text-muted small">Không có hồ sơ</div>}
               </div>
             </div>
-          )}
-          <div style={{maxHeight:500, overflow:'auto'}}>
-            {unpaidCases.map(c => (
-              <div key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action ${hoSoId===String(c.hoSoKhamId)?'active':''}`} style={{cursor:'pointer'}} onClick={async ()=>{ setHoSoId(String(c.hoSoKhamId)); await loadLabOrders(String(c.hoSoKhamId)); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
-                <div><strong>{c.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{c.benhNhan?.soDienThoai || ''}</small></div>
-                <div className="small text-muted">Chỉ định chưa thanh toán: {c.count}</div>
-              </div>
-            ))}
-            {unpaidCases.length===0 && <div className="text-muted small">Không có hồ sơ</div>}
           </div>
         </div>
-      ) : (
-        <div className="row mb-3">
-          <div className="col-md-4">
-            <div className="mb-2">
-              <button className="btn btn-link" onClick={()=>{ setHoSoId(''); setLabOrders([]); setCaseSearch(''); }}>← Quay lại danh sách hồ sơ</button>
+
+        <div className="col-12 col-lg-8">
+          <div className="card shadow-sm mb-3">
+            <div className="card-header bg-light d-flex justify-content-between align-items-center">
+              <strong>Chi tiết hồ sơ</strong>
+              {hoSoId && <span className="badge bg-info">HoSoKhamId: {hoSoId}</span>}
             </div>
-            <div style={{maxHeight:500, overflow:'auto'}}>
-              {unpaidCases.map(c => (
-                <div key={String(c.hoSoKhamId)} className={`list-group-item list-group-item-action ${hoSoId===String(c.hoSoKhamId)?'active':''}`} style={{cursor:'pointer'}} onClick={async ()=>{ setHoSoId(String(c.hoSoKhamId)); await loadLabOrders(String(c.hoSoKhamId)); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>
-                  <div><strong>{c.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{c.benhNhan?.soDienThoai || ''}</small></div>
-                  <div className="small text-muted">Chỉ định chưa thanh toán: {c.count}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="col-md-8">
-            <label>HoSoKhamId: <strong>{hoSoId}</strong></label>
-            {(() => {
-              const selectedCase = unpaidCases.find(cc => String(cc.hoSoKhamId) === hoSoId);
-              if(selectedCase){
-                return (
-                  <div className="card mb-2">
-                    <div className="card-body p-2">
-                      <div><strong>{selectedCase.benhNhan?.hoTen || '—'}</strong> <small className="text-muted">{selectedCase.benhNhan?.soDienThoai || ''}</small></div>
+            <div className="card-body">
+              {(() => {
+                const selectedCase = unpaidCases.find(cc => String(cc.hoSoKhamId) === hoSoId);
+                if(selectedCase){
+                  return (
+                    <div className="mb-3">
+                      <div className="fw-semibold">{selectedCase.benhNhan?.hoTen || '—'} <small className="text-muted">{selectedCase.benhNhan?.soDienThoai || ''}</small></div>
                       <div className="small text-muted">Ngày khám: {selectedCase.hoSoKhamNgay ? (new Date(selectedCase.hoSoKhamNgay)).toLocaleString() : '—'}</div>
                       <div className="small text-muted">Mã hồ sơ: {String(selectedCase.hoSoKhamId)}</div>
                     </div>
+                  );
+                }
+                return <div className="text-muted small">Chọn một hồ sơ để xem chi tiết</div>;
+              })()}
+              <div className="input-group mb-2">
+                <input className="form-control" value={hoSoId} onChange={e=>startTransition(() => setHoSoId(e.target.value))} placeholder="Nhập hoSoKhamId" />
+                <button className="btn btn-outline-secondary" onClick={()=>{ const id = hoSoId; loadLabOrders(id).then(()=>{ ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }); }}>Tải chỉ định</button>
+              </div>
+
+              <h6 className="mt-3">Chỉ định chưa thanh toán</h6>
+              <div className="mb-2" ref={ordersRef}>
+                {labOrders.map(l=> (
+                  <div key={l._id} className="form-check">
+                    <input className="form-check-input" type="checkbox" id={`lab-${l._id}`} checked={!!l._selected} onChange={e=>{
+                      setLabOrders(ls => ls.map(it => it._id === l._id ? {...it, _selected: e.target.checked } : it));
+                    }} />
+                    <label className="form-check-label" htmlFor={`lab-${l._id}`}>
+                      {l.dichVuId?.ten} — Giá: {l.dichVuId?.gia || 0}
+                      {l.createdAt && (
+                        <span className="text-muted small ms-2">(Ngày chỉ định: {new Date(l.createdAt).toLocaleString('vi-VN')})</span>
+                      )}
+                    </label>
                   </div>
-                );
-              }
-              return null;
-            })()}
-            <div className="input-group mb-2">
-              <input className="form-control" value={hoSoId} onChange={e=>setHoSoId(e.target.value)} placeholder="Nhập hoSoKhamId" />
-              <button className="btn btn-outline-secondary" onClick={async ()=>{ await loadLabOrders(hoSoId); ordersRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Tải chỉ định</button>
+                ))}
+                <div className="mt-2 d-flex gap-2">
+                  <button className="btn btn-success btn-sm" onClick={onPaySelectedLabOrders} disabled={loading}><i className="bi bi-phone"></i> Thanh toán MoMo (chỉ định đã chọn)</button>
+                </div>
+              </div>
             </div>
           </div>
-        </div>
-      )}
 
-      <p ref={ordersRef}>Danh sách chỉ định (chưa thanh toán):</p>
-      <div className="mb-3" ref={ordersRef}>
-        {labOrders.map(l=> (
-          <div key={l._id} className="form-check">
-            <input className="form-check-input" type="checkbox" id={`lab-${l._id}`} checked={!!l._selected} onChange={e=>{
-              setLabOrders(ls => ls.map(it => it._id === l._id ? {...it, _selected: e.target.checked } : it));
-            }} />
-            <label className="form-check-label" htmlFor={`lab-${l._id}`}>{l.dichVuId?.ten} — Giá: {l.dichVuId?.gia || 0}</label>
-          </div>
-        ))}
-        <div className="mt-2">
-          <button className="btn btn-success btn-sm me-2" onClick={onPaySelectedLabOrders} disabled={loading}>Thanh toán MoMo (chỉ định đã chọn)</button>
-        </div>
-      </div>
-
-      <p>Danh sách dịch vụ (chọn số lượng):</p>
-      <table className="table">
-        <thead><tr><th>Service</th><th>Giá</th><th>Số lượng</th><th></th></tr></thead>
-        <tbody>
-          {items.map((it,idx)=> (
-            <tr key={idx}>
-              <td>
-                <select value={it.serviceId} onChange={e=>updateLine(idx,{serviceId:e.target.value})} className="form-select">
-                  <option value="">-- Chọn dịch vụ --</option>
-                  {services.map(s=> <option key={s._id} value={s._id}>{s.ten} ({s.chuyenKhoaId?.ten || ''})</option>)}
-                </select>
-              </td>
-              <td>{services.find(s=> String(s._id)===String(it.serviceId))?.gia ?? 0}</td>
-              <td><input type="number" className="form-control" value={it.qty} min={1} onChange={e=>updateLine(idx,{qty: Number(e.target.value)})} /></td>
-              <td><button className="btn btn-sm btn-danger" onClick={()=>removeLine(idx)}>Xóa</button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <div className="mb-3">
-        <button className="btn btn-sm btn-outline-primary me-2" onClick={addLine}>Thêm dịch vụ</button>
-        <strong>Tổng: {total.toLocaleString()} đ</strong>
-      </div>
-      <div className="mb-3">
-        <button className="btn btn-primary" onClick={onPay} disabled={loading || total<=0}>Thanh toán bằng MoMo</button>
-      </div>
-
-      {paymentResult && (
-        <div className="card mt-3">
-          <div className="card-body">
-            <h5>Yêu cầu thanh toán</h5>
-            <pre style={{maxHeight:200, overflow:'auto'}}>{JSON.stringify(paymentResult.momo || paymentResult, null, 2)}</pre>
-            { (paymentResult.momo?.payUrl || paymentResult.momo?.payUrl) && (
-              <div>
-                <a className="btn btn-success" href={paymentResult.momo.payUrl} target="_blank" rel="noreferrer">Mở MoMo để thanh toán</a>
+          <div className="card shadow-sm">
+            <div className="card-header bg-light d-flex justify-content-between align-items-center">
+              <strong>Danh sách dịch vụ</strong>
+              <div><span className="badge bg-primary">Tổng: {total.toLocaleString()} đ</span></div>
+            </div>
+            <div className="card-body">
+              <table className="table align-middle">
+                <thead><tr><th>Service</th><th style={{width:120}}>Giá</th><th style={{width:140}}>Số lượng</th><th style={{width:80}}></th></tr></thead>
+                <tbody>
+                  {items.map((it,idx)=> (
+                    <tr key={idx}>
+                      <td>
+                        <select value={it.serviceId} onChange={e=>updateLine(idx,{serviceId:e.target.value})} className="form-select">
+                          <option value="">-- Chọn dịch vụ --</option>
+                          {services.map(s=> <option key={s._id} value={s._id}>{s.ten} ({s.chuyenKhoaId?.ten || ''})</option>)}
+                        </select>
+                      </td>
+                      <td>{services.find(s=> String(s._id)===String(it.serviceId))?.gia ?? 0}</td>
+                      <td><input type="number" className="form-control" value={it.qty} min={1} onChange={e=>updateLine(idx,{qty: Number(e.target.value)})} /></td>
+                      <td><button className="btn btn-sm btn-outline-danger" onClick={()=>removeLine(idx)}><i className="bi bi-trash"></i></button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="d-flex justify-content-between align-items-center">
+                <button className="btn btn-sm btn-outline-primary" onClick={addLine}><i className="bi bi-plus-circle"></i> Thêm dịch vụ</button>
+                <div className="d-flex gap-2">
+                  <button className="btn btn-warning" onClick={onPay} disabled={loading || total<=0}><i className="bi bi-phone"></i> Thanh toán MoMo</button>
+                  <button className="btn btn-success" onClick={onCashPay} disabled={total<=0}><i className="bi bi-cash-coin"></i> Thu tiền mặt</button>
+                </div>
               </div>
-            )}
-            {paymentResult.momo?.qrCode && (
-              <div className="mt-2"><img src={paymentResult.momo.qrCode} alt="QR" style={{maxWidth:300}} /></div>
-            )}
-            <div className="mt-2">Trạng thái: <strong>{status || 'PENDING'}</strong></div>
+            </div>
           </div>
+
+          {paymentResult && (
+            <div className="card shadow-sm mt-3">
+              <div className="card-header bg-light"><strong>Kết quả tạo yêu cầu thanh toán</strong></div>
+              <div className="card-body">
+                <pre style={{maxHeight:200, overflow:'auto'}}>{JSON.stringify(paymentResult.momo || paymentResult, null, 2)}</pre>
+                {paymentResult.momo?.payUrl && (
+                  <a className="btn btn-success" href={paymentResult.momo.payUrl} target="_blank" rel="noreferrer"><i className="bi bi-box-arrow-up-right"></i> Mở MoMo để thanh toán</a>
+                )}
+                {paymentResult.momo?.qrCode && (
+                  <div className="mt-2"><img src={paymentResult.momo.qrCode} alt="QR" style={{maxWidth:300}} /></div>
+                )}
+                <div className="mt-2">Trạng thái: <span className="badge bg-secondary">{status || 'PENDING'}</span></div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

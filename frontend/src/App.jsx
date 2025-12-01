@@ -42,10 +42,12 @@ import RequireReception from './pages/reception/RequireReception'
 import ReceptionLayout from './pages/reception/Layout'
 import ReceptionDashboard from './pages/reception/Dashboard'
 const ReceptionPayments = React.lazy(() => import('./pages/reception/Payments'));
+import ReceptionRevenueStats from './pages/reception/Stats'
 import RequireLab from './pages/lab/RequireLab'
 import LabLayout from './pages/lab/Layout'
 import LabDashboard from './pages/lab/Dashboard'
 import LabOrders from './pages/lab/Orders'
+import LabRevenueStats from './pages/lab/Stats'
 import RequirePharmacy from './pages/pharmacy/RequirePharmacy'
 import PharmacyLayout from './pages/pharmacy/Layout'
 import PharmacyDashboard from './pages/pharmacy/Dashboard'
@@ -88,6 +90,7 @@ export default function App() {
   return (
     <>
       <ServerStatus />
+      <React.Suspense fallback={<div className="text-center py-5"><div className="spinner-border text-primary" role="status" /><div className="mt-2 small text-muted">Đang tải...</div></div>}>
       <Routes>
       <Route element={<SiteLayout />}>
         <Route path="/" element={
@@ -153,6 +156,7 @@ export default function App() {
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />
           <Route path="payments" element={<ReceptionPayments />} />
+        <Route path="stats" element={<ReceptionRevenueStats />} />
         <Route path="my-schedule" element={<MySchedule />} />
         <Route path="schedule" element={<ReceptionSchedule />} />
         <Route path="doctors" element={<ReceptionDoctors />} />
@@ -161,6 +165,7 @@ export default function App() {
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>
         <Route path="dashboard" element={<LabDashboard />} />
         <Route path="orders" element={<LabOrders />} />
+        <Route path="stats" element={<LabRevenueStats />} />
         <Route path="my-schedule" element={<MySchedule />} />
       </Route>
 
@@ -188,6 +193,7 @@ export default function App() {
         <Route path="my-schedule" element={<MySchedule />} />
       </Route>
     </Routes>
+      </React.Suspense>
     </>
   )
 }

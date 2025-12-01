@@ -32,6 +32,11 @@ export default function LabLayout() {
                 </NavLink>
               </li>
               <li className="nav-item mb-2">
+                <NavLink to="/lab/stats" className={({isActive})=>`nav-link rounded-3 fw-semibold ${isActive?'active':''}`}>
+                  <i className="bi bi-graph-up me-2"></i>Thống kê doanh thu
+                </NavLink>
+              </li>
+              <li className="nav-item mb-2">
                 <NavLink to="/lab/my-schedule" className={({isActive})=>`nav-link rounded-3 fw-semibold ${isActive?'active':''}`}>
                   <i className="bi bi-calendar-event me-2"></i>Lịch của tôi
                 </NavLink>

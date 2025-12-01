@@ -28,6 +28,7 @@ export default function ReceptionLayout() {
               <li className="nav-item mb-2"><NavLink to="/reception/appointments" className={({isActive})=> linkClass(isActive)}><i className="bi bi-calendar-check me-2"></i>Đặt Lịch</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/doctors" className={({isActive})=> linkClass(isActive)}><i className="bi bi-people me-2"></i>Quản Lý Lịch Hẹn</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/payments" className={({isActive})=> linkClass(isActive)}><i className="bi bi-cash-stack me-2"></i>Thu tiền dịch vụ</NavLink></li>
+              <li className="nav-item mb-2"><NavLink to="/reception/stats" className={({isActive})=> linkClass(isActive)}><i className="bi bi-graph-up-arrow me-2"></i>Thống kê doanh thu</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/lookup" className={({isActive})=> linkClass(isActive)}><i className="bi bi-search me-2"></i>Tra cứu bệnh nhân</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/my-schedule" className={({isActive})=> linkClass(isActive)}><i className="bi bi-calendar-week me-2"></i>Lịch của tôi</NavLink></li>
               <li className="nav-item mt-3 w-100">
