@@ -235,61 +235,75 @@ export default function AdminWorkSchedulesPage(){
 
   return (
     <div>
-  <h2 className="mb-1">Lịch làm việc ({selectedRole})</h2>
-  <div className="text-muted small mb-2">
-    Tháng đang quản lý: {NEXT_MONTH_STR}. {configLoading && 'Đang tải cấu hình...'}
-    {!configLoading && config && (
-      <>
-        <span className="ms-2">Ngày mở: <strong>{config.openFrom}</strong></span>
-        <span className="ms-2">Trạng thái: {windowOpen? 'MỞ':'KHÓA'}</span>
-        {user?.role === 'admin' && (
-          <span className="ms-2 text-primary">(Admin luôn có quyền chỉnh)</span>
-        )}
-      </>
-    )}
-  </div>
-  {user?.role === 'admin' && config && (
-    <div className="card mb-3 p-2 small">
-      <div className="d-flex flex-wrap align-items-end gap-2">
-        <div>
-          <label className="form-label mb-0">Ngày mở đăng ký</label>
-          <input type="date" className="form-control form-control-sm" value={newOpenFrom} onChange={e=> setNewOpenFrom(e.target.value)} />
+      <div className="d-flex align-items-center justify-content-between mb-2">
+        <h4 className="mb-0">Lịch làm việc <span className="text-muted">({selectedRole})</span></h4>
+        <div className="text-muted small">
+          Tháng: <strong>{NEXT_MONTH_STR}</strong>
+          {configLoading && <span className="ms-2">Đang tải cấu hình...</span>}
+          {!configLoading && config && (
+            <>
+              <span className="ms-3">Ngày mở: <strong>{config.openFrom}</strong></span>
+              <span className="ms-3">Trạng thái: <span className={`badge ${windowOpen? 'text-bg-success':'text-bg-secondary'}`}>{windowOpen? 'MỞ':'KHÓA'}</span></span>
+              {user?.role === 'admin' && (
+                <span className="ms-2 text-primary">(Admin luôn có quyền chỉnh)</span>
+              )}
+            </>
+          )}
         </div>
-        <button className="btn btn-sm btn-primary mt-3" disabled={!newOpenFrom || newOpenFrom===config.openFrom} onClick={async()=>{
-          try { const updated = await updateNextScheduleConfig({ openFrom: newOpenFrom }); setConfig(updated); toast.success('Đã cập nhật'); loadConfig(); } catch(err){ toast.error(err?.response?.data?.message || 'Lỗi cập nhật'); }
-        }}>Lưu ngày mở</button>
       </div>
-    </div>
-  )}
-      <div className="d-flex flex-wrap align-items-center gap-3 mb-2 small">
-  <div className="d-flex align-items-center gap-1"><span className="badge text-bg-primary">&nbsp;</span> <span>Làm</span></div>
-        <div className="d-flex align-items-center gap-1"><span className="badge text-bg-warning">&nbsp;</span> <span>Trực</span></div>
-        <div className="d-flex align-items-center gap-1"><span className="badge text-bg-secondary">&nbsp;</span> <span>Nghỉ</span></div>
-        <div className="text-muted">Click ô để chỉnh • Ctrl+Click chuyển nhanh</div>
-      </div>
-      <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
-        <div>
-          <label className="form-label mb-0">Role</label>
-          <select className="form-select" value={selectedRole} onChange={e=> setSelectedRole(e.target.value)}>
-            {roles.map(r=> <option key={r} value={r}>{r}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="form-label mb-0">Tháng</label>
-          <div className="d-flex align-items-center gap-2">
-            <button className="btn btn-outline-secondary btn-sm" disabled>&lt;</button>
-            <input type="month" className="form-control" value={monthStr} readOnly disabled />
-            <button className="btn btn-outline-secondary btn-sm" disabled>&gt;</button>
+
+      {user?.role === 'admin' && config && (
+        <div className="card mb-3">
+          <div className="card-body small d-flex flex-wrap align-items-end gap-3">
+            <div>
+              <label className="form-label mb-1">Ngày mở đăng ký</label>
+              <input type="date" className="form-control form-control-sm" value={newOpenFrom} onChange={e=> setNewOpenFrom(e.target.value)} />
+            </div>
+            <button className="btn btn-sm btn-primary" disabled={!newOpenFrom || newOpenFrom===config.openFrom} onClick={async()=>{
+              try { const updated = await updateNextScheduleConfig({ openFrom: newOpenFrom }); setConfig(updated); toast.success('Đã cập nhật'); loadConfig(); } catch(err){ toast.error(err?.response?.data?.message || 'Lỗi cập nhật'); }
+            }}>Lưu ngày mở</button>
           </div>
         </div>
-        <button className="btn btn-primary" onClick={load} disabled={loading}>{loading ? 'Đang tải...' : 'Tải lại'}</button>
-        <button className="btn btn-outline-secondary" onClick={()=>setBulkMode(b=>!b)}>{bulkMode ? 'Đóng Bulk' : 'Bulk chỉnh'}</button>
+      )}
+
+      <div className="card mb-3">
+        <div className="card-body py-2">
+          <div className="d-flex flex-wrap align-items-center gap-3 small">
+            <div className="d-flex align-items-center gap-1"><span className="badge text-bg-primary">&nbsp;</span> <span>Làm</span></div>
+            <div className="d-flex align-items-center gap-1"><span className="badge text-bg-warning">&nbsp;</span> <span>Trực</span></div>
+            <div className="d-flex align-items-center gap-1"><span className="badge text-bg-secondary">&nbsp;</span> <span>Nghỉ</span></div>
+            <div className="text-muted">Click ô để chỉnh • Ctrl+Click chuyển nhanh</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card mb-3">
+        <div className="card-body d-flex flex-wrap gap-3 align-items-end">
+          <div>
+            <label className="form-label mb-0">Role</label>
+            <select className="form-select" value={selectedRole} onChange={e=> setSelectedRole(e.target.value)}>
+              {roles.map(r=> <option key={r} value={r}>{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="form-label mb-0">Tháng</label>
+            <div className="d-flex align-items-center gap-2">
+              <button className="btn btn-outline-secondary btn-sm" disabled>&lt;</button>
+              <input type="month" className="form-control" value={monthStr} readOnly disabled />
+              <button className="btn btn-outline-secondary btn-sm" disabled>&gt;</button>
+            </div>
+          </div>
+          <div className="ms-auto d-flex gap-2">
+            <button className="btn btn-primary" onClick={load} disabled={loading}>{loading ? 'Đang tải...' : 'Tải lại'}</button>
+            <button className="btn btn-outline-secondary" onClick={()=>setBulkMode(b=>!b)}>{bulkMode ? 'Đóng Bulk' : 'Bulk chỉnh'}</button>
+          </div>
+        </div>
       </div>
 
       {bulkMode && (
         <div className="card mb-3">
           <div className="card-body">
-            <h5>Bulk gán ca</h5>
+            <h5 className="mb-3">Bulk gán ca</h5>
             <div className="row g-2">
               <div className="col-md-3">
                 <label className="form-label">User</label>
@@ -326,7 +340,7 @@ export default function AdminWorkSchedulesPage(){
                   <span className="badge text-bg-info">{Object.values(bulkDays).filter(Boolean).length}</span>
                 </label>
                 <div className="mb-2 d-flex flex-wrap gap-1">
-                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={()=> {
+                  <button type="button" className="btn btn-sm btn-outline-secondary" onClick={()=> {
                     const map={}; days.forEach(d=> map[localDateStr(d)] = true); setBulkDays(map);
                   }}>Tất cả</button>
                   <button type="button" className="btn btn-sm btn-outline-secondary" onClick={()=> {
@@ -412,44 +426,52 @@ export default function AdminWorkSchedulesPage(){
         </div>
       )}
 
-      <div className="table-responsive" style={{ maxHeight: '70vh' }}>
-        <table className="table table-sm table-bordered align-middle schedule-table">
-          <thead className="table-light">
-            <tr>
-              <th className="user-sticky user-col">User</th>
+      <div className="card">
+        <div className="card-body p-0">
+          <div className="table-responsive" style={{ maxHeight: '70vh' }}>
+            <table className="table table-sm table-bordered align-middle schedule-table mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th className="user-sticky user-col">User</th>
                   {days.map(d=> <th key={localDateStr(d)} className="text-center" style={{ minWidth: 42 }}>{d.getDate()}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u=> shifts.map((shift,idx)=> (
-              <tr key={u._id + shift} className={idx===0? 'border-top border-dark':''}>
-                {idx===0 && (
-                  <td rowSpan={shifts.length} className="user-sticky">
-                    <div className="fw-semibold">{u.name || u._id.slice(-6)}</div>
-                    <div className="text-muted small">{u.role}</div>
-                  </td>
-                )}
-                {days.map(d=>{
-                  const cell = getCell(u._id, d, shift);
-                  let bgClass = 'empty';
-                  if(cell){ bgClass = 'cell-' + cell.shiftType; }
-                  return (
-                    <td key={u._id + localDateStr(d) + shift} className={`cell ${bgClass}`} onClick={(e)=> handleCellClick(u._id, d, shift, e)}>
-                      {shiftBadge(cell)}
-                    </td>
-                  );
-                })}
-              </tr>
-            )))}
-          </tbody>
-        </table>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u=> shifts.map((shift,idx)=> (
+                  <tr key={u._id + shift} className={idx===0? 'border-top border-dark':''}>
+                    {idx===0 && (
+                      <td rowSpan={shifts.length} className="user-sticky">
+                        <div className="fw-semibold">{u.name || u._id.slice(-6)}</div>
+                        <div className="text-muted small">{u.role}</div>
+                      </td>
+                    )}
+                    {days.map(d=>{
+                      const cell = getCell(u._id, d, shift);
+                      let bgClass = 'empty';
+                      if(cell){ bgClass = 'cell-' + cell.shiftType; }
+                      return (
+                        <td key={u._id + localDateStr(d) + shift} className={`cell ${bgClass}`} onClick={(e)=> handleCellClick(u._id, d, shift, e)}>
+                          {shiftBadge(cell)}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                )))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div className="mt-3">
-        <h6>Thống kê trong tháng</h6>
-        <ul>
-          {stats.map(s=> <li key={s._id.role + s._id.shiftType}>{s._id.role}: {s._id.shiftType} = {s.count}</li>)}
-        </ul>
+        <div className="card">
+          <div className="card-body">
+            <h6 className="mb-2">Thống kê trong tháng</h6>
+            <ul className="mb-0">
+              {stats.map(s=> <li key={s._id.role + s._id.shiftType}>{s._id.role}: {s._id.shiftType} = {s.count}</li>)}
+            </ul>
+          </div>
+        </div>
       </div>
 
       {editingCell && (
@@ -461,10 +483,12 @@ export default function AdminWorkSchedulesPage(){
                 <button type="button" className="btn-close" onClick={()=> setEditingCell(null)}></button>
               </div>
               <div className="modal-body">
-                {shiftTypeOptions.map(opt=> (
-                  <button key={opt.value} className="btn btn-outline-primary me-2 mb-2" onClick={()=> saveCell(opt.value)}>{opt.label}</button>
-                ))}
-                <button className="btn btn-outline-danger ms-2 mb-2" onClick={clearCell}>Xóa ca</button>
+                <div className="d-flex flex-wrap gap-2">
+                  {shiftTypeOptions.map(opt=> (
+                    <button key={opt.value} className="btn btn-outline-primary" onClick={()=> saveCell(opt.value)}>{opt.label}</button>
+                  ))}
+                  <button className="btn btn-outline-danger" onClick={clearCell}>Xóa ca</button>
+                </div>
               </div>
             </div>
           </div>
