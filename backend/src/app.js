@@ -26,6 +26,9 @@ const workSchedulesRouter = require('./routes/workSchedules');
 const patientsRouter = require('./routes/patients');
 const revenueRouter = require('./routes/revenue');
 const receptionRouter = require('./routes/reception');
+const newsRouter = require('./routes/news');
+const reviewsRouter = require('./routes/reviews');
+const adminNewsRouter = require('./routes/adminNews');
 
 const app = express();
 
@@ -74,6 +77,10 @@ app.use('/api/pharmacy', auth, authorize('pharmacy','admin'), pharmacyRouter);
 app.use('/api/revenue', auth, authorize('admin','cashier'), revenueRouter);
 // Reception dashboard endpoints
 app.use('/api/reception', auth, authorize('reception','admin'), receptionRouter);
+// News and reviews
+app.use('/api/news', newsRouter);
+app.use('/api/reviews', reviewsRouter);
+app.use('/api/admin/news', auth, authorize('admin'), adminNewsRouter);
 
 // Protected sample route
 app.get('/api/profile', auth, (req, res) => {

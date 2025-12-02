@@ -31,6 +31,8 @@ export default function AdminLayout() {
               <li className="nav-item mb-2"><NavLink to="/admin/work-schedules" className={({isActive})=> linkClass(isActive)}><i className="bi bi-calendar-week me-2"></i>Lịch làm việc</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/admin/revenue" className={({isActive})=> linkClass(isActive)}><i className="bi bi-graph-up-arrow me-2"></i>Báo cáo doanh thu</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/admin/booking-stats" className={({isActive})=> linkClass(isActive)}><i className="bi bi-bar-chart me-2"></i>Thống kê đặt lịch</NavLink></li>
+              <li className="nav-item mb-2"><NavLink to="/admin/news" className={({isActive})=> linkClass(isActive)}><i className="bi bi-newspaper me-2"></i>Tin tức</NavLink></li>
+              <li className="nav-item mb-2"><NavLink to="/admin/reviews" className={({isActive})=> linkClass(isActive)}><i className="bi bi-star me-2"></i>Đánh giá</NavLink></li>
             </ul>
             <div className="mt-auto w-100">
               <div className="small text-muted mb-2">{user?.name || user?.email}</div>
