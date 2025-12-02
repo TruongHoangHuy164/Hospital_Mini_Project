@@ -88,6 +88,7 @@ import ReceptionSchedule from './pages/reception/Schedule'
 import ReceptionDoctors from './pages/reception/Doctors'
 import MedicinesIndex from './pages/medicines/Index'
 import ContactPage from './pages/contact/Index'
+import AboutPage from './pages/about/Index'
 import NewsIndex from './pages/news/Index'
 import NewsDetail from './pages/news/Detail'
 import ReviewsPage from './pages/reviews/Index'
@@ -114,6 +115,7 @@ export default function App() {
   <Route path="/specialties" element={<SpecialtiesPage />} />
   <Route path="/services" element={<ServicesPage />} />
   <Route path="/medicines" element={<MedicinesIndex />} />
+  <Route path="/about" element={<AboutPage />} />
   <Route path="/news" element={<NewsIndex />} />
   <Route path="/news/:slug" element={<NewsDetail />} />
   <Route path="/reviews" element={<ReviewsPage />} />
