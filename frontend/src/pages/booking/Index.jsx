@@ -284,6 +284,21 @@ export default function BookingPage(){
         const json = await res.json();
         if(res.ok && json.soThuTu){
           setTicket({ soThuTu: json.soThuTu, trangThai: json.sttTrangThai || 'dang_cho' });
+          // Ensure we have appointment time visible when ticket is issued
+          try{
+            const dres = await fetch(`${API_URL}/api/booking/appointments/${apptId}/detail-simple`, { headers: { 'Content-Type':'application/json' } });
+            const det = await dres.json();
+            if(dres.ok){
+              setApptDetail(det);
+              // Backfill appointment state with key fields so UI can show giờ khám
+              setAppointment(prev => prev && prev._id === apptId ? prev : {
+                _id: apptId,
+                ngayKham: det.ngayKham,
+                khungGio: det.khungGio,
+                trangThai: 'da_thanh_toan'
+              });
+            }
+          }catch{}
           clearInterval(timer);
         }
       }catch{}
@@ -397,6 +412,50 @@ export default function BookingPage(){
                 const sangSlots = d.khungGioTrong.filter(g=>inRange(g, sh.sang.start, sh.sang.end));
                 const chieuSlots = d.khungGioTrong.filter(g=>inRange(g, sh.chieu.start, sh.chieu.end));
                 const toiSlots = d.khungGioTrong.filter(g=>inRange(g, sh.toi.start, sh.toi.end));
+                // Nhóm theo block 30 phút, mỗi block hiển thị tối đa 3 slot (ví dụ 07:30 block: 07:30, 07:40, 07:50)
+                const blockStart = (t)=>{
+                  const [hh,mm] = t.split(':').map(Number);
+                  const base = mm < 30 ? 0 : 30;
+                  return `${String(hh).padStart(2,'0')}:${String(base).padStart(2,'0')}`;
+                };
+                const groupByBlock = (arr)=>{
+                  const map = {};
+                  for(const s of arr){ const b = blockStart(s); (map[b] = map[b] || []).push(s); }
+                  return Object.entries(map).sort((a,b)=>a[0].localeCompare(b[0]));
+                };
+                const sangBlocks = groupByBlock(sangSlots);
+                const chieuBlocks = groupByBlock(chieuSlots);
+                const toiBlocks = groupByBlock(toiSlots);
+                const freeSet = new Set(d.khungGioTrong);
+                const addMinutesStr = (time, mins)=>{
+                  const [hh,mm] = time.split(':').map(Number);
+                  const dt = new Date(2000,0,1,hh,mm);
+                  dt.setMinutes(dt.getMinutes()+mins);
+                  const H = String(dt.getHours()).padStart(2,'0');
+                  const M = String(dt.getMinutes()).padStart(2,'0');
+                  return `${H}:${M}`;
+                };
+                const blockLabelEnd = (block)=> addMinutesStr(block,30);
+                const renderBlock = (prefix, blocks)=> (
+                  blocks.length===0 ? (<span className="text-muted small">—</span>) : blocks.map(([block])=> {
+                    const candidates = [block, addMinutesStr(block,10), addMinutesStr(block,20)].filter(t=> inRange(t, sh[prefix].start, sh[prefix].end));
+                    return (
+                      <div key={`${prefix}b-${block}`} className="mb-2">
+                        <div className="small text-muted">{block}–{blockLabelEnd(block)}</div>
+                        <div className="d-flex flex-wrap gap-2">
+                          {candidates.map(g => {
+                            const free = freeSet.has(g);
+                            const active = selected.bacSiId===d.bacSiId && selected.khungGio===g;
+                            const btnClass = free ? (active ? 'btn-primary' : 'btn-outline-primary') : 'btn-outline-secondary disabled opacity-50';
+                            return (
+                              <button key={`${prefix}-${g}`} className={`btn btn-sm ${btnClass}`} disabled={!free} onClick={()=> free && setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })
+                );
                 const noSlots = d.khungGioTrong.length===0;
                 return (
                   <div key={d.bacSiId} className="list-group-item">
@@ -407,27 +466,18 @@ export default function BookingPage(){
                       <div className="row g-2">
                         <div className="col-md-4">
                           <div className="small fw-semibold mb-1">Ca sáng</div>
-                          <div className="d-flex flex-wrap gap-2">
-                            {sangSlots.length===0 ? <span className="text-muted small">—</span> : sangSlots.map(g => (
-                              <button key={`s-${g}`} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
-                            ))}
-                          </div>
+                          {renderBlock('sang', sangBlocks)}
+                          <div className="small text-muted mt-1">Khung 30 phút • tối đa 3 lượt (10 phút/lượt)</div>
                         </div>
                         <div className="col-md-4">
                           <div className="small fw-semibold mb-1">Ca chiều</div>
-                          <div className="d-flex flex-wrap gap-2">
-                            {chieuSlots.length===0 ? <span className="text-muted small">—</span> : chieuSlots.map(g => (
-                              <button key={`c-${g}`} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
-                            ))}
-                          </div>
+                          {renderBlock('chieu', chieuBlocks)}
+                          <div className="small text-muted mt-1">Khung 30 phút • tối đa 3 lượt (10 phút/lượt)</div>
                         </div>
                         <div className="col-md-4">
                           <div className="small fw-semibold mb-1">Ca tối</div>
-                          <div className="d-flex flex-wrap gap-2">
-                            {toiSlots.length===0 ? <span className="text-muted small">—</span> : toiSlots.map(g => (
-                              <button key={`t-${g}`} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
-                            ))}
-                          </div>
+                          {renderBlock('toi', toiBlocks)}
+                          <div className="small text-muted mt-1">Khung 30 phút • tối đa 3 lượt (10 phút/lượt)</div>
                         </div>
                       </div>
                     )}
@@ -471,14 +521,18 @@ export default function BookingPage(){
             )}
             {ticket && (
               <>
-                <h4 className="mb-3">Mã số của bạn</h4>
-                <div className="display-3 fw-bold">{ticket.soThuTu}</div>
-                <div className="mt-2">Trạng thái: <span className="badge text-bg-secondary">{ticket.trangThai}</span></div>
+                <h4 className="mb-1">Mã số của bạn</h4>
+                <div className="display-4 fw-bold">{ticket.soThuTu}</div>
+                <div className="mt-1">Trạng thái: <span className="badge text-bg-secondary">{ticket.trangThai}</span></div>
+                <div className="mt-2 small text-muted">STT tăng liên tục theo ngày</div>
                 {/* Thông tin lịch khám đầy đủ */}
                 <div className="mt-3 text-start">
                   <div className="small text-muted">Thông tin cuộc hẹn</div>
                   <div className="fw-semibold">
-                    {appointment?.ngayKham ? new Date(appointment.ngayKham).toLocaleDateString('vi-VN') : date} • {appointment?.khungGio || selected?.khungGio || '—'}
+                    Ngày khám: {appointment?.ngayKham ? new Date(appointment.ngayKham).toLocaleDateString('vi-VN') : date}
+                  </div>
+                  <div>
+                    Giờ khám: <strong>{apptDetail?.khungGio || appointment?.khungGio || selected?.khungGio || '—'}</strong>
                   </div>
                   {apptDetail?.bacSi && (
                     <div className="mt-1">

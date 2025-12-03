@@ -30,6 +30,15 @@ const router = express.Router();
 // Tính đầu ngày/cuối ngày để lọc theo ngày
 function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); }
+// Chuẩn hoá chuỗi giờ về định dạng HH:MM để so sánh lexicographic an toàn
+function normTimeStr(t){
+  if(!t || typeof t !== 'string') return '';
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
+  if(!m) return t; // fallback nguyên bản
+  const hh = String(Math.min(99, Math.max(0, parseInt(m[1],10)))).padStart(2,'0');
+  const mm = String(Math.min(59, Math.max(0, parseInt(m[2],10)))).padStart(2,'0');
+  return `${hh}:${mm}`;
+}
 // Tạo khoảng ngày cho 1 tháng (YYYY-MM) để so sánh chuỗi 'YYYY-MM-DD'
 function monthRangeStr(month){
   const m = /^([0-9]{4})-([0-9]{2})$/.exec(month||'');
@@ -286,7 +295,8 @@ router.get('/availability', async (req, res, next) => {
       return m;
     }, {});
 
-    // Build slots within each shift window at 30-min interval
+    // Build slots within each shift window at 10-min interval
+    // Ví dụ: 07:30–08:00 -> 07:30, 07:40, 07:50 (3 slot)
     function buildSlots(start, end){
       const [sh, sm] = start.split(':').map(Number);
       const [eh, em] = end.split(':').map(Number);
@@ -297,7 +307,7 @@ router.get('/availability', async (req, res, next) => {
         const hh = String(base.getHours()).padStart(2,'0');
         const mm = String(base.getMinutes()).padStart(2,'0');
         out.push(`${hh}:${mm}`);
-        base.setMinutes(base.getMinutes()+30);
+        base.setMinutes(base.getMinutes()+10);
       }
       return out;
     }
@@ -448,15 +458,16 @@ router.post('/appointments/:id/pay', async (req, res, next) => {
     appt.trangThai = 'da_thanh_toan';
     await appt.save();
 
-    // Generate queue number for that date and doctor
+    // Generate queue number strictly by registration order on the appointment day
     const dayStart = startOfDay(appt.ngayKham);
     const dayEnd = endOfDay(appt.ngayKham);
-    const count = await SoThuTu.countDocuments({ 
-      lichKhamId: { $exists: true }, 
-      createdAt: { $gte: dayStart, $lt: dayEnd }, 
-      benhNhanId: appt.benhNhanId 
-    });
-    const so = count + 1;
+    // Count existing queue numbers for all appointments of this day (any doctor)
+    const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd } }).select('_id').lean();
+    const idSet = apptIdsInDay.map(a => a._id);
+    const existingCount = idSet.length
+      ? await SoThuTu.countDocuments({ lichKhamId: { $in: idSet } })
+      : 0;
+    const so = existingCount + 1;
     const stt = await SoThuTu.create({ 
       lichKhamId: appt._id, 
       benhNhanId: appt.benhNhanId, 
@@ -820,8 +831,13 @@ router.post('/momo/ipn', express.json(), async (req, res) => {
           const dayEnd = endOfDay(appt.ngayKham);
           const exists = await SoThuTu.findOne({ lichKhamId: appt._id });
           if(!exists){
-            const count = await SoThuTu.countDocuments({ lichKhamId: { $exists: true }, createdAt: { $gte: dayStart, $lt: dayEnd }, benhNhanId: appt.benhNhanId });
-            const so = count + 1;
+            // STT theo thứ tự đăng ký trong ngày khám: số tiếp theo dựa trên tổng STT đã cấp cho ngày đó
+            const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd } }).select('_id').lean();
+            const idSet = apptIdsInDay.map(a => a._id);
+            const existingCount = idSet.length
+              ? await SoThuTu.countDocuments({ lichKhamId: { $in: idSet } })
+              : 0;
+            const so = existingCount + 1;
             await SoThuTu.create({ lichKhamId: appt._id, benhNhanId: appt.benhNhanId, soThuTu: so, trangThai: 'dang_cho' });
           }
         }
@@ -875,8 +891,12 @@ router.post('/momo/return', express.json(), async (req, res) => {
     if(!stt){
       const dayStart = startOfDay(appt.ngayKham);
       const dayEnd = endOfDay(appt.ngayKham);
-      const count = await SoThuTu.countDocuments({ lichKhamId: { $exists: true }, createdAt: { $gte: dayStart, $lt: dayEnd }, benhNhanId: appt.benhNhanId });
-      const so = count + 1;
+      const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd } }).select('_id').lean();
+      const idSet = apptIdsInDay.map(a => a._id);
+      const existingCount = idSet.length
+        ? await SoThuTu.countDocuments({ lichKhamId: { $in: idSet } })
+        : 0;
+      const so = existingCount + 1;
       stt = await SoThuTu.create({ lichKhamId: appt._id, benhNhanId: appt.benhNhanId, soThuTu: so, trangThai: 'dang_cho' });
     }
     return res.json({ ok: true, soThuTu: stt.soThuTu, sttTrangThai: stt.trangThai });
@@ -944,8 +964,13 @@ router.get('/momo/return-get', async (req, res) => {
     if(!stt){
       const dayStart = startOfDay(appt.ngayKham);
       const dayEnd = endOfDay(appt.ngayKham);
-      const count = await SoThuTu.countDocuments({ lichKhamId: { $exists: true }, createdAt: { $gte: dayStart, $lt: dayEnd }, benhNhanId: appt.benhNhanId });
-      const so = count + 1;
+      // Count queue numbers already issued for appointments of this appointment day
+      const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd } }).select('_id').lean();
+      const idSet = apptIdsInDay.map(a => a._id);
+      const existingCount = idSet.length
+        ? await SoThuTu.countDocuments({ lichKhamId: { $in: idSet } })
+        : 0;
+      const so = existingCount + 1;
       stt = await SoThuTu.create({ lichKhamId: appt._id, benhNhanId: appt.benhNhanId, soThuTu: so, trangThai: 'dang_cho' });
     }
 

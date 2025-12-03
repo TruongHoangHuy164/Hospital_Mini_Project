@@ -9,6 +9,11 @@ export default function BookingHistory(){
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const [ticket, setTicket] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
 
 
@@ -16,11 +21,19 @@ export default function BookingHistory(){
   async function load(p=1){
     setLoading(true); setError('');
     try{
-      const res = await fetch(`${API_URL}/api/booking/my-appointments?page=${p}&limit=10`, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')||''}` } });
-      const json = await res.json();
+      const res = await fetch(`${API_URL}/api/booking/my-appointments?page=${p}&limit=10&_=${Date.now()}`,
+        { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')||''}`, 'Cache-Control': 'no-cache', Pragma: 'no-cache' } }
+      );
+      if(res.status === 304){
+        // Not modified: keep current items
+        setPage(p);
+        return;
+      }
+      const json = await res.json().catch(()=>({ items: [], page: 1, totalPages: 1 }));
       console.log('API Response:', json);
       if(!res.ok) throw json;
-      setItems(json.items||[]);
+      const list = Array.isArray(json.items) ? json.items : [];
+      setItems(list);
       setPage(json.page||1);
       setTotalPages(json.totalPages||1);
     }catch(e){ 
@@ -83,13 +96,35 @@ export default function BookingHistory(){
 
   useEffect(()=>{ load(1); },[]);
 
+  async function openDetail(id){
+    setSelectedId(id);
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try{
+      const dres = await fetch(`${API_URL}/api/booking/appointments/${id}/detail-simple`, { headers: { 'Content-Type':'application/json' } });
+      const djson = await dres.json();
+      if(dres.ok) setDetail(djson); else setDetail(null);
+      const tres = await fetch(`${API_URL}/api/booking/appointments/${id}/ticket`);
+      const tjson = await tres.json();
+      if(tres.ok) setTicket({ soThuTu: tjson.soThuTu, trangThai: tjson.sttTrangThai || 'dang_cho' }); else setTicket(null);
+    }catch(e){ setDetail(null); setTicket(null); }
+    finally{ setDetailLoading(false); }
+  }
+
+  function closeDetail(){
+    setDetailOpen(false);
+    setSelectedId(null);
+    setDetail(null);
+    setTicket(null);
+  }
+
   return (
     <div className="container my-4">
       <h3>Lịch sử đặt khám</h3>
       {error && <div className="alert alert-danger">{error}</div>}
       <div className="table-responsive">
         <table className="table table-striped">
-          <thead><tr><th>Ngày</th><th>Tên bệnh nhân</th><th>Khung giờ</th><th>Bác sĩ</th><th>Chuyên khoa</th><th>Trạng thái</th><th>STT</th><th>Hủy lịch</th></tr></thead>
+          <thead><tr><th>Ngày</th><th>Tên bệnh nhân</th><th>Khung giờ</th><th>Bác sĩ</th><th>Chuyên khoa</th><th>Trạng thái</th><th>STT</th><th>Hủy lịch</th><th>Chi tiết</th></tr></thead>
           <tbody>
             {Array.isArray(items) && items.map(it=> (
               <tr key={it._id}>
@@ -123,10 +158,15 @@ export default function BookingHistory(){
                     <span className="text-muted small">Không thể hủy</span>
                   )}
                 </td>
+                <td>
+                  <button className="btn btn-sm btn-outline-primary" onClick={()=>openDetail(it._id)}>
+                    Xem chi tiết
+                  </button>
+                </td>
               </tr>
             ))}
             {(!Array.isArray(items) || items.length===0) && (
-              <tr><td colSpan={8} className="text-center">Không có dữ liệu</td></tr>
+              <tr><td colSpan={9} className="text-center">Không có dữ liệu</td></tr>
             )}
           </tbody>
         </table>
@@ -137,6 +177,45 @@ export default function BookingHistory(){
         <button disabled={loading || page>=totalPages} className="btn btn-outline-secondary" onClick={()=>load(page+1)}>Trang sau</button>
       </div>
 
+
+      {/* Detail Modal */}
+      {detailOpen && (
+        <div className="modal d-block" tabIndex="-1" role="dialog" style={{ background: 'rgba(0,0,0,0.5)' }}>
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Chi tiết lịch khám</h5>
+                <button type="button" className="btn-close" onClick={closeDetail}></button>
+              </div>
+              <div className="modal-body">
+                {detailLoading ? (
+                  <div className="text-center py-3">
+                    <div className="spinner-border" role="status"><span className="visually-hidden">Loading...</span></div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-2"><span className="text-muted small">Ngày khám:</span> <strong>{detail?.ngayKham ? new Date(detail.ngayKham).toLocaleDateString('vi-VN') : '-'}</strong></div>
+                    <div className="mb-2"><span className="text-muted small">Giờ khám:</span> <strong>{detail?.khungGio || '-'}</strong></div>
+                    <div className="mb-2"><span className="text-muted small">STT:</span> <strong>{ticket?.soThuTu ?? '-'}</strong> <span className="badge text-bg-secondary ms-2">{ticket?.trangThai || 'dang_cho'}</span></div>
+                    {detail?.bacSi && (
+                      <div className="mb-2">
+                        <span className="text-muted small">Bác sĩ:</span> <strong>{detail.bacSi.hoTen}</strong> <span className="text-muted">• {detail.bacSi.chuyenKhoa}</span>
+                      </div>
+                    )}
+                    {detail?.bacSi?.phongKham && (
+                      <div className="mb-2"><span className="text-muted small">Phòng khám:</span> <strong>{detail.bacSi.phongKham.tenPhong || '-'}</strong></div>
+                    )}
+                    <div className="alert alert-warning mt-3">Vui lòng đến trước <strong>15 phút</strong> so với giờ khám.</div>
+                  </>
+                )}
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={closeDetail}>Đóng</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
