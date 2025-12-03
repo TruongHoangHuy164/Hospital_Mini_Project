@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom'
 const items = [
   { id: 1, label: 'Đặt lịch khám', icon: 'calendar2-check' },
   { id: 2, label: 'Tra cứu kết quả', icon: 'file-earmark-medical' },
-  { id: 3, label: 'Bảng giá', icon: 'cash-stack' },
+  //{ id: 3, label: 'Bảng giá', icon: 'cash-stack' },
   { id: 4, label: 'Hướng dẫn khám', icon: 'clipboard-check' },
   { id: 5, label: 'Lịch sử đặt khám', icon: 'clock-history' }
 ]

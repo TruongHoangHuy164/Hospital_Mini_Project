@@ -32,6 +32,8 @@ import StaffEdit from './pages/admin/staff/Edit'
 import AdminWorkSchedulesPage from './pages/admin/schedule/Index'
 import Revenue from './pages/admin/Revenue'
 import AdminBookingStats from './pages/admin/BookingStats'
+import AdminNews from './pages/admin/news/Index'
+import AdminReviews from './pages/admin/reviews/Index'
 import SiteLayout from './layouts/SiteLayout'
 import RequireDoctor from './pages/doctor/RequireDoctor'
 import DoctorLayout from './pages/doctor/Layout'
@@ -85,6 +87,11 @@ import MySchedule from './pages/shared/MySchedule'
 import ReceptionSchedule from './pages/reception/Schedule'
 import ReceptionDoctors from './pages/reception/Doctors'
 import MedicinesIndex from './pages/medicines/Index'
+import ContactPage from './pages/contact/Index'
+import AboutPage from './pages/about/Index'
+import NewsIndex from './pages/news/Index'
+import NewsDetail from './pages/news/Detail'
+import ReviewsPage from './pages/reviews/Index'
 
 export default function App() {
   return (
@@ -108,6 +115,11 @@ export default function App() {
   <Route path="/specialties" element={<SpecialtiesPage />} />
   <Route path="/services" element={<ServicesPage />} />
   <Route path="/medicines" element={<MedicinesIndex />} />
+  <Route path="/about" element={<AboutPage />} />
+  <Route path="/news" element={<NewsIndex />} />
+  <Route path="/news/:slug" element={<NewsDetail />} />
+  <Route path="/reviews" element={<ReviewsPage />} />
+  <Route path="/contact" element={<ContactPage />} />
   <Route path="/booking" element={<BookingPage />} />
   <Route path="/booking/history" element={<BookingHistory />} />
   <Route path="/booking/history-test" element={<HistoryTest />} />
@@ -138,6 +150,8 @@ export default function App() {
   <Route path="work-schedules" element={<AdminWorkSchedulesPage />} />
         <Route path="revenue" element={<Revenue />} />
         <Route path="booking-stats" element={<AdminBookingStats />} />
+        <Route path="news" element={<AdminNews />} />
+        <Route path="reviews" element={<AdminReviews />} />
       </Route>
 
       <Route path="/doctor" element={<RequireDoctor><DoctorLayout /></RequireDoctor>}>

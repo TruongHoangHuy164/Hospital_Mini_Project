@@ -11,7 +11,10 @@ const privateApi = axios.create({
 });
 
 privateApi.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
+  // Read token from common keys to avoid mismatch across flows
+  const token = localStorage.getItem('accessToken')
+    || localStorage.getItem('token')
+    || localStorage.getItem('jwt');
   console.log('API Request:', config.method?.toUpperCase(), config.url);
   console.log('API Base URL:', config.baseURL);
   console.log('Token present:', !!token);
