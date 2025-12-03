@@ -459,9 +459,9 @@ export default function Intake(){
                 <td>{p.hoTen}</td><td>{p.soDienThoai||'-'}</td><td>{p.ngaySinh? new Date(p.ngaySinh).toLocaleDateString(): '-'}</td>
                 <td>
                   {p._type === 'profile' ? (
-                    <a className="btn btn-sm btn-outline-primary" href={`/reception/appointments?hoSoBenhNhanId=${p._id}`}>Đặt lịch</a>
+                    <a className="btn btn-sm btn-outline-primary" href={`/reception/direct-booking?hoSoBenhNhanId=${p._id}`}>Đặt lịch</a>
                   ) : (
-                    <a className="btn btn-sm btn-outline-primary" href={`/reception/appointments?benhNhanId=${p._id}`}>Đặt lịch</a>
+                    <a className="btn btn-sm btn-outline-primary" href={`/reception/direct-booking?benhNhanId=${p._id}`}>Đặt lịch</a>
                   )}
                 </td>
               </tr>
