@@ -42,6 +42,7 @@ export default function ReceptionAppointments(){
         bacSiId: selected.bacSiId,
         chuyenKhoaId,
         date,
+        khungGio: selected.khungGio,
       };
       if(benhNhanId) body.benhNhanId = benhNhanId;
       if(hoSoBenhNhanId) body.hoSoBenhNhanId = hoSoBenhNhanId;
@@ -58,12 +59,15 @@ export default function ReceptionAppointments(){
       const json = await res.json();
       if(!res.ok) throw json;
       setAppt(json);
+      return json;
     }catch(e){ alert(e?.message||'Lỗi đặt lịch'); }
   }
 
-  async function payAndQueue(){
+  async function payAndQueue(apptId){
     try{
-      const res = await fetch(`${API_URL}/api/booking/appointments/${appt._id}/pay`, {
+      const id = apptId || appt?._id;
+      if(!id) throw new Error('Chưa có lịch hẹn để cấp STT');
+      const res = await fetch(`${API_URL}/api/booking/appointments/${id}/pay`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${localStorage.getItem('accessToken') || ''}` }
       });
@@ -73,14 +77,20 @@ export default function ReceptionAppointments(){
     }catch(e){ alert(e?.message||'Lỗi thanh toán'); }
   }
 
+  async function createAndQueue(){
+    // Convenience for walk-in: create appointment and immediately issue STT
+    const created = appt || await createAppointment();
+    if(created?._id){ await payAndQueue(created._id); }
+  }
+
   async function payCash150k(){
     try{
       if(!hoSoKhamId) throw new Error('Vui lòng nhập Hồ sơ khám ID để thanh toán');
       const resp = await createCashPayment({
         hoSoKhamId,
         amount: 150000,
-        orderRefs: appt ? [{ type: 'appointment', id: appt._id }] : undefined,
-        targetType: 'lichkham'
+        // Payment target is the visit record; do not pass orderRefs for hosokham
+        targetType: 'hosokham'
       });
       await payAndQueue();
     }catch(e){ alert(e?.response?.data?.message || e.message || 'Lỗi thanh toán tiền mặt'); }
@@ -94,9 +104,9 @@ export default function ReceptionAppointments(){
       const resp = await createMomoPayment({
         hoSoKhamId,
         amount: 150000,
-        orderInfo: appt ? `Thanh toán đặt lịch #${appt._id}` : 'Thanh toán đặt lịch',
-        orderRefs: appt ? [{ type: 'appointment', id: appt._id }] : undefined,
-        targetType: 'lichkham',
+        orderInfo: appt ? `Thanh toán hồ sơ #${hoSoKhamId}` : 'Thanh toán hồ sơ',
+        // For hosokham, omit orderRefs to avoid ObjectId cast error
+        targetType: 'hosokham',
         returnUrl,
         notifyUrl,
       });
@@ -170,8 +180,18 @@ export default function ReceptionAppointments(){
             <div className="mt-2 d-flex gap-2">
               <button className="btn btn-sm btn-success" onClick={payCash150k}><i className="bi bi-cash-coin me-1"></i>Thanh toán tiền mặt 150k</button>
               <button className="btn btn-sm btn-warning" onClick={payMomo150k}><i className="bi bi-phone me-1"></i>Thanh toán MoMo 150k</button>
-              <button className="btn btn-sm btn-primary" onClick={payAndQueue}><i className="bi bi-ticket-perforated me-1"></i>Cấp số thứ tự</button>
+              <button className="btn btn-sm btn-primary" onClick={() => payAndQueue()}><i className="bi bi-ticket-perforated me-1"></i>Cấp số thứ tự</button>
             </div>
+          </div>
+        </Card>
+      )}
+
+      {!appt && (
+        <Card>
+          <div className="d-flex justify-content-end">
+            <button className="btn btn-primary" disabled={(!benhNhanId && !hoSoBenhNhanId) || !chuyenKhoaId || !selected.bacSiId || !selected.khungGio} onClick={createAndQueue}>
+              <i className="bi bi-check2-circle me-1"></i>Đặt và cấp STT
+            </button>
           </div>
         </Card>
       )}

@@ -352,17 +352,24 @@ router.get('/availability', async (req, res, next) => {
 // POST /api/booking/appointments - Tạo lịch khám (cho bản thân hoặc người thân)
 router.post('/appointments', auth, async (req, res, next) => {
   try{
-    const { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio } = req.body || {};
+    const { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio, source } = req.body || {};
     const nguoiDatId = req.user.id;
 
-    console.log('Booking request data:', { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio, nguoiDatId });
+    const isWalkIn = source === 'reception-direct' && ['admin','reception'].includes(req.user.role);
+    console.log('Booking request data:', { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio, source, nguoiDatId, isWalkIn });
 
     if ((!benhNhanId && !hoSoBenhNhanId) || (benhNhanId && hoSoBenhNhanId)) {
       return res.status(400).json({ message: 'Cần cung cấp `benhNhanId` (cho bản thân) hoặc `hoSoBenhNhanId` (cho người thân).' });
     }
-    if(!bacSiId || !chuyenKhoaId || !date || !khungGio) return res.status(400).json({ message: 'Thiếu dữ liệu bắt buộc (bác sĩ, chuyên khoa, ngày, giờ).' });
+    if(!bacSiId || !chuyenKhoaId){
+      return res.status(400).json({ message: 'Thiếu dữ liệu bắt buộc (bác sĩ, chuyên khoa).' });
+    }
+    if(!isWalkIn && (!date || !khungGio)){
+      return res.status(400).json({ message: 'Thiếu dữ liệu bắt buộc (bác sĩ, chuyên khoa, ngày, giờ).' });
+    }
     
-    const d = new Date(date);
+    // For walk-in: default date is today if not provided
+    const d = isWalkIn && !date ? new Date() : new Date(date);
     if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
     const dayStart = startOfDay(d);
 
@@ -371,9 +378,53 @@ router.post('/appointments', auth, async (req, res, next) => {
       bacSiId,
       chuyenKhoaId,
       ngayKham: dayStart,
-      khungGio,
+      khungGio: (function(){
+        if(!isWalkIn) return khungGio;
+        // Generate a unique-looking time token for walk-in so it doesn't block slots
+        const now = new Date();
+        const hh = String(now.getHours()).padStart(2,'0');
+        const mm = String(now.getMinutes()).padStart(2,'0');
+        const ss = String(now.getSeconds()).padStart(2,'0');
+        const rand = String(Math.floor(Math.random()*90)+10);
+        return `${hh}:${mm}:${ss}-${rand}`; // e.g., 09:42:17-53
+      })(),
       trangThai: 'cho_thanh_toan'
     };
+
+    // For walk-in: ensure current time is still within any configured shift window today
+    if(isWalkIn){
+      // Load shift hours for current month
+      const yearMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      const cfg = await ScheduleConfig.findOne({ month: yearMonth });
+      const defaultShiftHours = {
+        sang: { start: '07:30', end: '11:30' },
+        chieu: { start: '13:00', end: '17:00' },
+        toi: { start: '18:00', end: '22:00' }
+      };
+      const shiftHours = cfg?.shiftHours || defaultShiftHours;
+      const now = new Date();
+      const nowStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+      const within = (range)=> range && nowStr >= range.start && nowStr <= range.end;
+      let currentShift = null;
+      if(within(shiftHours.sang)) currentShift = 'sang';
+      else if(within(shiftHours.chieu)) currentShift = 'chieu';
+      else if(within(shiftHours.toi)) currentShift = 'toi';
+      if(!currentShift){
+        return res.status(400).json({ message: `Ngoài giờ làm. Khung ca hôm nay: ` +
+          [shiftHours.sang?`Sáng ${shiftHours.sang.start}-${shiftHours.sang.end}`:null, shiftHours.chieu?`Chiều ${shiftHours.chieu.start}-${shiftHours.chieu.end}`:null, shiftHours.toi?`Tối ${shiftHours.toi.start}-${shiftHours.toi.end}`:null].filter(Boolean).join('; ') });
+      }
+      // Validate doctor works this shift today
+      const bs = await BacSi.findById(bacSiId).select('userId hoTen chuyenKhoa');
+      if(!bs) return res.status(404).json({ message: 'Bác sĩ không tồn tại' });
+      if(!bs.userId){
+        return res.status(400).json({ message: 'Bác sĩ chưa liên kết tài khoản để lập lịch' });
+      }
+      const dayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const hasSchedule = await WorkSchedule.exists({ userId: bs.userId, role: 'doctor', day: dayStr, shift: currentShift });
+      if(!hasSchedule){
+        return res.status(400).json({ message: `Bác sĩ không làm việc ca ${currentShift} hôm nay (${dayStr})` });
+      }
+    }
 
     if (benhNhanId) {
       // Đặt lịch cho bản thân (sử dụng BenhNhan model)
@@ -433,6 +484,26 @@ router.post('/appointments', auth, async (req, res, next) => {
     // Save as exact date with time start-of-day; store khungGio separately
     const lk = await LichKham.create(appointmentData);
     console.log('Created appointment:', lk._id);
+
+    // For walk-in: immediately assign next queue number for the day
+    if(isWalkIn){
+      if(!appointmentData.benhNhanId){
+        // Safety: in theory benhNhanId should be set above for both self and relative
+        console.warn('Walk-in appointment missing benhNhanId, queue not generated');
+        return res.status(201).json(lk);
+      }
+      const dayStart2 = startOfDay(lk.ngayKham);
+      const dayEnd2 = endOfDay(lk.ngayKham);
+      const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart2, $lt: dayEnd2 } }).select('_id').lean();
+      const idSet = apptIdsInDay.map(a => a._id);
+      const existingCount = idSet.length
+        ? await SoThuTu.countDocuments({ lichKhamId: { $in: idSet } })
+        : 0;
+      const so = existingCount + 1;
+      const stt = await SoThuTu.create({ lichKhamId: lk._id, benhNhanId: appointmentData.benhNhanId, soThuTu: so, trangThai: 'dang_cho' });
+      return res.status(201).json({ lichKham: lk, soThuTu: stt });
+    }
+
     res.status(201).json(lk);
   }catch(err){
     console.error('Booking error:', err);

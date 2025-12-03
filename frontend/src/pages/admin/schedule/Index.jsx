@@ -41,13 +41,20 @@ function getNextMonthBase(){
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth()+1, 1);
 }
+function getCurrentMonthBase(){
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1);
+}
 const NEXT_MONTH_BASE = getNextMonthBase();
 const NEXT_MONTH_STR = formatMonth(NEXT_MONTH_BASE);
+const CURRENT_MONTH_BASE = getCurrentMonthBase();
+const CURRENT_MONTH_STR = formatMonth(CURRENT_MONTH_BASE);
 
 export default function AdminWorkSchedulesPage(){
   const { user } = useAuth();
   const [monthDate, setMonthDate] = useState(()=> NEXT_MONTH_BASE);
   const [monthStr, setMonthStr] = useState(NEXT_MONTH_STR);
+  const [monthChoice, setMonthChoice] = useState('next'); // 'current' | 'next'
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState([]); // raw schedule rows
   const [selectedRole, setSelectedRole] = useState('doctor');
@@ -113,6 +120,14 @@ export default function AdminWorkSchedulesPage(){
     setMonthStr(formatMonth(monthDate));
   },[monthDate]);
 
+  useEffect(()=>{
+    if(monthChoice === 'current'){
+      setMonthDate(CURRENT_MONTH_BASE);
+    } else {
+      setMonthDate(NEXT_MONTH_BASE);
+    }
+  }, [monthChoice]);
+
   useEffect(()=>{ load(); }, [monthStr, selectedRole]);
   useEffect(()=>{ loadStats(); }, [monthStr, selectedRole]);
 
@@ -154,8 +169,25 @@ export default function AdminWorkSchedulesPage(){
     return order[idx+1];
   }
 
+  function isPastOrCurrentMonth(){
+    const curY = CURRENT_MONTH_BASE.getFullYear();
+    const curM = CURRENT_MONTH_BASE.getMonth();
+    const y = monthDate.getFullYear();
+    const m = monthDate.getMonth();
+    return y < curY || (y === curY && m <= curM);
+  }
+  function isCurrentMonth(){
+    const y = monthDate.getFullYear();
+    const m = monthDate.getMonth();
+    return y === CURRENT_MONTH_BASE.getFullYear() && m === CURRENT_MONTH_BASE.getMonth();
+  }
+
   async function handleCellClick(userId, dayDate, shift, event){
-  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
+  if(!user) return;
+  // Current month: only admin can edit
+  if(isCurrentMonth() && user.role !== 'admin'){ toast.warn('Chỉ admin được chỉnh tháng hiện tại'); return; }
+  // Future months: require window open for non-admin
+  if(user.role !== 'admin' && !isPastOrCurrentMonth() && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     const cell = getCell(userId, dayDate, shift);
     if(event && (event.ctrlKey || event.metaKey || event.altKey)){
       // quick cycle
@@ -177,7 +209,9 @@ export default function AdminWorkSchedulesPage(){
   }
 
   async function saveCell(shiftType){
-  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
+  if(!user) return;
+  if(isCurrentMonth() && user.role !== 'admin'){ toast.warn('Chỉ admin được chỉnh tháng hiện tại'); return; }
+  if(user.role !== 'admin' && !isPastOrCurrentMonth() && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     const { userId, day, shift, existing } = editingCell;
   const payloadBase = { userId, role: selectedRole, day: localDateStr(day), shift, shiftType };
     try {
@@ -193,7 +227,9 @@ export default function AdminWorkSchedulesPage(){
   }
 
   async function clearCell(){
-  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
+  if(!user) return;
+  if(isCurrentMonth() && user.role !== 'admin'){ toast.warn('Chỉ admin được chỉnh tháng hiện tại'); return; }
+  if(user.role !== 'admin' && !isPastOrCurrentMonth() && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     const { existing } = editingCell || {};
     if(existing){
       try{ await deleteWorkSchedule(existing._id); setData(prev=> prev.filter(r=> r._id !== existing._id)); }
@@ -207,13 +243,14 @@ export default function AdminWorkSchedulesPage(){
     return <span className="badge bg-transparent text-dark">{shiftTypeLabelMap[cell.shiftType] || cell.shiftType}</span>;
   }
 
-  function changeMonth(delta){
-    // Disabled: only next month allowed
-    return;
+  function changeMonth(choice){
+    setMonthChoice(choice);
   }
 
   async function applyBulk(){
-  if(user?.role !== 'admin' && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
+  if(!user) return;
+  if(isCurrentMonth() && user.role !== 'admin'){ toast.warn('Chỉ admin được chỉnh tháng hiện tại'); return; }
+  if(user.role !== 'admin' && !isPastOrCurrentMonth() && !windowOpen){ toast.warn('Chưa mở đăng ký'); return; }
     if(!bulkSelectedUser) return toast.error('Chọn user');
     if(!bulkShifts.length) return toast.error('Chọn ít nhất 1 ca');
   const dayList = Object.entries(bulkDays).filter(([k,v])=>v).map(([dayStr])=> dayStr);
@@ -238,7 +275,7 @@ export default function AdminWorkSchedulesPage(){
       <div className="d-flex align-items-center justify-content-between mb-2">
         <h4 className="mb-0">Lịch làm việc <span className="text-muted">({selectedRole})</span></h4>
         <div className="text-muted small">
-          Tháng: <strong>{NEXT_MONTH_STR}</strong>
+          Tháng: <strong>{monthStr}</strong>
           {configLoading && <span className="ms-2">Đang tải cấu hình...</span>}
           {!configLoading && config && (
             <>
@@ -288,9 +325,16 @@ export default function AdminWorkSchedulesPage(){
           <div>
             <label className="form-label mb-0">Tháng</label>
             <div className="d-flex align-items-center gap-2">
-              <button className="btn btn-outline-secondary btn-sm" disabled>&lt;</button>
-              <input type="month" className="form-control" value={monthStr} readOnly disabled />
-              <button className="btn btn-outline-secondary btn-sm" disabled>&gt;</button>
+              <button className="btn btn-outline-secondary btn-sm" onClick={()=> setMonthDate(d=> new Date(d.getFullYear(), d.getMonth()-1, 1))}>&lt;</button>
+              <input type="month" className="form-control" value={monthStr} onChange={e=> {
+                const [yy, mm] = e.target.value.split('-');
+                setMonthDate(new Date(Number(yy), Number(mm)-1, 1));
+              }} />
+              <button className="btn btn-outline-secondary btn-sm" onClick={()=> setMonthDate(d=> new Date(d.getFullYear(), d.getMonth()+1, 1))}>&gt;</button>
+              <div className="btn-group" role="group">
+                <button type="button" className="btn btn-sm btn-outline-secondary" onClick={()=> setMonthDate(CURRENT_MONTH_BASE)}>Hiện tại</button>
+                <button type="button" className="btn btn-sm btn-outline-secondary" onClick={()=> setMonthDate(NEXT_MONTH_BASE)}>Tháng sau</button>
+              </div>
             </div>
           </div>
           <div className="ms-auto d-flex gap-2">

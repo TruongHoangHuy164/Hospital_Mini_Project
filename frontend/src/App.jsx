@@ -92,6 +92,7 @@ import AboutPage from './pages/about/Index'
 import NewsIndex from './pages/news/Index'
 import NewsDetail from './pages/news/Detail'
 import ReviewsPage from './pages/reviews/Index'
+import DirectBooking from './pages/reception/DirectBooking';
 
 export default function App() {
   return (
@@ -174,6 +175,7 @@ export default function App() {
         <Route path="my-schedule" element={<MySchedule />} />
         <Route path="schedule" element={<ReceptionSchedule />} />
         <Route path="doctors" element={<ReceptionDoctors />} />
+          <Route path="direct-booking" element={<DirectBooking />} />
       </Route>
 
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>
