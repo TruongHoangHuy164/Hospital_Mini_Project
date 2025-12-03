@@ -30,6 +30,7 @@ export default function BookingPage(){
   const [appointment, setAppointment] = useState(null);
   const [ticket, setTicket] = useState(null);
   const [loadingPay, setLoadingPay] = useState(false);
+  const [apptDetail, setApptDetail] = useState(null);
 
   const headers = useMemo(()=>({ 'Content-Type':'application/json', Authorization: `Bearer ${localStorage.getItem('accessToken')||''}` }), []);
 
@@ -261,6 +262,19 @@ export default function BookingPage(){
     finally{ setLoadingPay(false); }
   }
 
+  // Load appointment detail for display (doctor + clinic) when we have an appointment id
+  useEffect(()=>{
+    const id = appointment?._id;
+    if(!id) return;
+    (async ()=>{
+      try{
+        const res = await fetch(`${API_URL}/api/booking/appointments/${id}/detail-simple`, { headers: { 'Content-Type':'application/json' } });
+        const json = await res.json();
+        if(res.ok){ setApptDetail(json); }
+      }catch{}
+    })();
+  }, [appointment?._id]);
+
   async function pollTicket(apptId){
     let tries = 0;
     const timer = setInterval(async () => {
@@ -364,19 +378,62 @@ export default function BookingPage(){
         <div className="card shadow-sm">
           <div className="card-header">3. Chọn bác sĩ và khung giờ</div>
           <div className="card-body">
+            {/* Hiển thị khung giờ ca hiệu lực */}
+            {availability.shiftHours && (
+              <div className="alert alert-light border mb-3">
+                <div className="small">Khung giờ theo ca:</div>
+                <div className="small">Sáng: {availability.shiftHours.sang.start}–{availability.shiftHours.sang.end} • Chiều: {availability.shiftHours.chieu.start}–{availability.shiftHours.chieu.end} • Tối: {availability.shiftHours.toi.start}–{availability.shiftHours.toi.end}</div>
+              </div>
+            )}
+            {/* Helper: nhóm slot theo ca dựa trên shiftHours */}
             <div className="list-group">
-              {availability.doctors.map(d => (
-                <div key={d.bacSiId} className="list-group-item">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div className="fw-semibold">{d.hoTen} <span className="text-muted">• {d.chuyenKhoa}</span></div>
-                    <div className="d-flex flex-wrap gap-2">
-                      {d.khungGioTrong.length===0 ? <span className="text-muted small">Hết chỗ</span> : d.khungGioTrong.map(g => (
-                        <button key={g} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
-                      ))}
-                    </div>
+              {availability.doctors.length === 0 && (
+                <div className="list-group-item text-muted small">Không có bác sĩ cho chuyên khoa này.</div>
+              )}
+              {availability.doctors.map(d => {
+                const sh = availability.shiftHours || { sang:{start:'07:30',end:'11:30'}, chieu:{start:'13:00',end:'17:00'}, toi:{start:'18:00',end:'22:00'} };
+                const toMinutes = (t)=>{ const [hh,mm]=t.split(':').map(Number); return hh*60+mm; };
+                const inRange = (t, s, e)=>{ const m=toMinutes(t); return m>=toMinutes(s) && m<toMinutes(e); };
+                const sangSlots = d.khungGioTrong.filter(g=>inRange(g, sh.sang.start, sh.sang.end));
+                const chieuSlots = d.khungGioTrong.filter(g=>inRange(g, sh.chieu.start, sh.chieu.end));
+                const toiSlots = d.khungGioTrong.filter(g=>inRange(g, sh.toi.start, sh.toi.end));
+                const noSlots = d.khungGioTrong.length===0;
+                return (
+                  <div key={d.bacSiId} className="list-group-item">
+                    <div className="fw-semibold mb-2">{d.hoTen} <span className="text-muted">• {d.chuyenKhoa}</span></div>
+                    {noSlots ? (
+                      <span className="text-muted small">Hết chỗ hoặc bác sĩ nghỉ ngày này.</span>
+                    ) : (
+                      <div className="row g-2">
+                        <div className="col-md-4">
+                          <div className="small fw-semibold mb-1">Ca sáng</div>
+                          <div className="d-flex flex-wrap gap-2">
+                            {sangSlots.length===0 ? <span className="text-muted small">—</span> : sangSlots.map(g => (
+                              <button key={`s-${g}`} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="small fw-semibold mb-1">Ca chiều</div>
+                          <div className="d-flex flex-wrap gap-2">
+                            {chieuSlots.length===0 ? <span className="text-muted small">—</span> : chieuSlots.map(g => (
+                              <button key={`c-${g}`} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="small fw-semibold mb-1">Ca tối</div>
+                          <div className="d-flex flex-wrap gap-2">
+                            {toiSlots.length===0 ? <span className="text-muted small">—</span> : toiSlots.map(g => (
+                              <button key={`t-${g}`} className={`btn btn-sm ${selected.bacSiId===d.bacSiId && selected.khungGio===g ? 'btn-primary' : 'btn-outline-primary'}`} onClick={()=>setSelected({ bacSiId: d.bacSiId, khungGio: g })}>{g}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
           <div className="card-footer d-flex justify-content-between">
@@ -417,6 +474,24 @@ export default function BookingPage(){
                 <h4 className="mb-3">Mã số của bạn</h4>
                 <div className="display-3 fw-bold">{ticket.soThuTu}</div>
                 <div className="mt-2">Trạng thái: <span className="badge text-bg-secondary">{ticket.trangThai}</span></div>
+                {/* Thông tin lịch khám đầy đủ */}
+                <div className="mt-3 text-start">
+                  <div className="small text-muted">Thông tin cuộc hẹn</div>
+                  <div className="fw-semibold">
+                    {appointment?.ngayKham ? new Date(appointment.ngayKham).toLocaleDateString('vi-VN') : date} • {appointment?.khungGio || selected?.khungGio || '—'}
+                  </div>
+                  {apptDetail?.bacSi && (
+                    <div className="mt-1">
+                      Bác sĩ: <strong>{apptDetail.bacSi.hoTen}</strong> <span className="text-muted">• {apptDetail.bacSi.chuyenKhoa}</span>
+                    </div>
+                  )}
+                  {apptDetail?.bacSi?.phongKham && (
+                    <div className="mt-1">Phòng khám: <strong>{apptDetail.bacSi.phongKham.tenPhong || '—'}</strong></div>
+                  )}
+                </div>
+                <div className="mt-3 alert alert-warning text-start" role="alert">
+                  Vui lòng đến trước <strong>15 phút</strong> so với giờ khám để hoàn thành thủ tục tiếp đón.
+                </div>
                 <div className="mt-2 small text-muted">Giữ gìn số thứ tự và đến đúng giờ khám.</div>
               </>
             )}

@@ -16,6 +16,10 @@ const SoThuTu = require('../models/SoThuTu');
 const HoSoKham = require('../models/HoSoKham');
 // Model cận lâm sàng
 const CanLamSang = require('../models/CanLamSang');
+// Lịch làm việc nhân sự
+const WorkSchedule = require('../models/WorkSchedule');
+// Cấu hình lịch tháng (bao gồm khung giờ ca)
+const ScheduleConfig = require('../models/ScheduleConfig');
 // Hồ sơ người thân
 const PatientProfile = require('../models/PatientProfile');
 const auth = require('../middlewares/auth');
@@ -26,6 +30,17 @@ const router = express.Router();
 // Tính đầu ngày/cuối ngày để lọc theo ngày
 function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); }
+// Tạo khoảng ngày cho 1 tháng (YYYY-MM) để so sánh chuỗi 'YYYY-MM-DD'
+function monthRangeStr(month){
+  const m = /^([0-9]{4})-([0-9]{2})$/.exec(month||'');
+  if(!m) return null;
+  const y = +m[1]; const mon = +m[2]; if(mon<1||mon>12) return null;
+  const start = `${m[1]}-${m[2]}-01`;
+  const nextMonth = new Date(Date.UTC(y, mon-1, 1)); nextMonth.setUTCMonth(nextMonth.getUTCMonth()+1);
+  const ny = nextMonth.getUTCFullYear(); const nm = String(nextMonth.getUTCMonth()+1).padStart(2,'0');
+  const end = `${ny}-${nm}-01`; // exclusive
+  return { start, end };
+}
 
 // POST /api/booking/patients - Tạo/cập nhật hồ sơ bệnh nhân cho chính user hiện tại
 router.post('/patients', auth, async (req, res, next) => {
@@ -240,20 +255,61 @@ router.get('/availability', async (req, res, next) => {
     if(!chuyenKhoaId || !date) return res.status(400).json({ message: 'Thiếu chuyenKhoaId hoặc date' });
     const d = new Date(date);
     if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
-
-    // Find doctors in specialty
-    const doctors = await BacSi.find({ chuyenKhoa: { $exists: true }, phongKhamId: { $exists: true } , /* placeholder */}).where({}).find({}).where('chuyenKhoa').regex(/.*/)
-      .find();
-    // Note: The project stores specialty name in BacSi.chuyenKhoa (string), while PhongKham references a ChuyenKhoaId.
-    // We'll include doctors whose chuyenKhoa matches the specialty name for now.
+    // Load specialty
     const spec = await ChuyenKhoa.findById(chuyenKhoaId);
     if(!spec) return res.status(404).json({ message: 'Chuyên khoa không tồn tại' });
-    const list = await BacSi.find({ chuyenKhoa: spec.ten }).select('hoTen chuyenKhoa phongKhamId');
+    // Doctors by specialty name
+    const doctors = await BacSi.find({ chuyenKhoa: spec.ten }).select('hoTen chuyenKhoa phongKhamId userId');
+    const doctorIds = doctors.map(x=>x._id);
+    const doctorUserIds = doctors.map(x=>x.userId).filter(Boolean);
+    const userToDoctor = doctors.reduce((m, d)=>{ if(d.userId) m[String(d.userId)] = d._id; return m; }, {});
 
-    // Assume fixed time slots; in real app, load from doctor schedule
-    const slots = ['08:00','08:30','09:00','09:30','10:00','10:30','14:00','14:30','15:00','15:30'];
+    // Determine shift hours for the month of the given date
+    const yearMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const cfg = await ScheduleConfig.findOne({ month: yearMonth });
+    const defaultShiftHours = {
+      sang: { start: '07:30', end: '11:30' },
+      chieu: { start: '13:00', end: '17:00' },
+      toi: { start: '18:00', end: '22:00' }
+    };
+    const shiftHours = cfg?.shiftHours || defaultShiftHours;
+
+    // Find which shifts each doctor works on that day from WorkSchedule
+    const dayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const schedules = await WorkSchedule.find({ userId: { $in: doctorUserIds }, role: 'doctor', day: dayStr }).select('userId shift');
+    const shiftsByDoctor = schedules.reduce((m, s)=>{
+      const did = userToDoctor[String(s.userId)];
+      if(!did) return m;
+      const k = String(did);
+      m[k] = m[k] || new Set();
+      m[k].add(s.shift);
+      return m;
+    }, {});
+
+    // Build slots within each shift window at 30-min interval
+    function buildSlots(start, end){
+      const [sh, sm] = start.split(':').map(Number);
+      const [eh, em] = end.split(':').map(Number);
+      const base = new Date(d.getFullYear(), d.getMonth(), d.getDate(), sh, sm);
+      const endDt = new Date(d.getFullYear(), d.getMonth(), d.getDate(), eh, em);
+      const out = [];
+      while(base < endDt){
+        const hh = String(base.getHours()).padStart(2,'0');
+        const mm = String(base.getMinutes()).padStart(2,'0');
+        out.push(`${hh}:${mm}`);
+        base.setMinutes(base.getMinutes()+30);
+      }
+      return out;
+    }
+    const slotsByShift = {
+      sang: buildSlots(shiftHours.sang.start, shiftHours.sang.end),
+      chieu: buildSlots(shiftHours.chieu.start, shiftHours.chieu.end),
+      toi: buildSlots(shiftHours.toi.start, shiftHours.toi.end)
+    };
+
+    // Busy map for that date
     const dayStart = startOfDay(d), dayEnd = endOfDay(d);
-    const busy = await LichKham.find({ bacSiId: { $in: list.map(x=>x._id) }, ngayKham: { $gte: dayStart, $lt: dayEnd } })
+    const busy = await LichKham.find({ bacSiId: { $in: doctorIds }, ngayKham: { $gte: dayStart, $lt: dayEnd } })
       .select('bacSiId khungGio');
     const busyMap = busy.reduce((m, x)=>{
       const k = String(x.bacSiId);
@@ -261,12 +317,25 @@ router.get('/availability', async (req, res, next) => {
       m[k].add(x.khungGio);
       return m;
     }, {});
-    const result = list.map(d => {
-      const taken = busyMap[String(d._id)] || new Set();
-      const free = slots.filter(s => !taken.has(s));
-      return { bacSiId: d._id, hoTen: d.hoTen, chuyenKhoa: d.chuyenKhoa, khungGioTrong: free };
+
+    // Compose availability: only show slots for shifts the doctor works
+    const result = doctors.map(doc => {
+      const did = String(doc._id);
+      const workedShifts = shiftsByDoctor[did] || new Set();
+      // If no schedule entry, doctor not working that day -> empty
+      if(workedShifts.size === 0){
+        return { bacSiId: doc._id, hoTen: doc.hoTen, chuyenKhoa: doc.chuyenKhoa, khungGioTrong: [], shiftHours };
+      }
+      // Aggregate slots from worked shifts
+      const allSlots = [];
+      for(const sh of ['sang','chieu','toi']){
+        if(workedShifts.has(sh)) allSlots.push(...slotsByShift[sh]);
+      }
+      const taken = busyMap[did] || new Set();
+      const free = allSlots.filter(s => !taken.has(s));
+      return { bacSiId: doc._id, hoTen: doc.hoTen, chuyenKhoa: doc.chuyenKhoa, khungGioTrong: free, shiftHours };
     });
-    res.json({ date, chuyenKhoaId, doctors: result, slots });
+    res.json({ date, chuyenKhoaId, doctors: result, shiftHours });
   }catch(err){ return next(err); }
 });
 
@@ -608,6 +677,45 @@ router.get('/queues', async (req, res, next) => {
 
 module.exports = router;
 
+// ===== Ngày làm việc theo lịch bác sĩ =====
+// GET /api/booking/doctor-available-days?bacSiId=...&month=YYYY-MM
+// Trả về danh sách ngày trong tháng mà bác sĩ có lịch làm việc (sang/chieu/toi)
+router.get('/doctor-available-days', async (req, res, next) => {
+  try{
+    const { bacSiId, month } = req.query;
+    if(!bacSiId || !month) return res.status(400).json({ message: 'Thiếu bacSiId hoặc month' });
+    const range = monthRangeStr(month);
+    if(!range) return res.status(400).json({ message: 'month phải dạng YYYY-MM' });
+    const bs = await BacSi.findById(bacSiId).select('userId hoTen chuyenKhoa');
+    if(!bs) return res.status(404).json({ message: 'Không tìm thấy bác sĩ' });
+    if(!bs.userId) return res.status(400).json({ message: 'Bác sĩ chưa liên kết tài khoản User' });
+
+    // Fetch schedules in the month for this doctor (by userId)
+    const scheds = await WorkSchedule.find({
+      userId: bs.userId,
+      role: 'doctor',
+      day: { $gte: range.start, $lt: range.end }
+    }).select('day shift').lean();
+
+    const byDay = scheds.reduce((m,s)=>{
+      (m[s.day] = m[s.day] || new Set()).add(s.shift);
+      return m;
+    }, {});
+    const days = Object.keys(byDay).sort().map(day => ({ day, shifts: Array.from(byDay[day]) }));
+
+    // Include shift hours for that month
+    const cfg = await ScheduleConfig.findOne({ month });
+    const defaultShiftHours = {
+      sang: { start: '07:30', end: '11:30' },
+      chieu: { start: '13:00', end: '17:00' },
+      toi: { start: '18:00', end: '22:00' }
+    };
+    const shiftHours = cfg?.shiftHours || defaultShiftHours;
+
+    res.json({ bacSiId, month, days, shiftHours });
+  }catch(err){ return next(err); }
+});
+
 // ====== MoMo Payment Integration (Test) ======
 // Create MoMo payment for an appointment
 // POST /api/booking/appointments/:id/momo
@@ -864,5 +972,33 @@ router.get('/appointments/:id/ticket', async (req, res, next) => {
     if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
     const stt = await SoThuTu.findOne({ lichKhamId: id }).select('soThuTu trangThai');
     res.json({ trangThai: appt.trangThai, soThuTu: stt?.soThuTu || null, sttTrangThai: stt?.trangThai || null });
+  }catch(err){ return next(err); }
+});
+
+// GET /api/booking/appointments/:id/detail-simple
+// Mô tả: Trả thông tin cơ bản của lịch khám kèm bác sĩ và phòng khám để hiển thị cho user
+router.get('/appointments/:id/detail-simple', async (req, res, next) => {
+  try{
+    const { id } = req.params;
+    const appt = await LichKham.findById(id)
+      .populate({
+        path: 'bacSiId',
+        select: 'hoTen chuyenKhoa phongKhamId',
+        populate: { path: 'phongKhamId', select: 'tenPhong' }
+      })
+      .select('_id ngayKham khungGio bacSiId chuyenKhoaId');
+    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
+    const out = {
+      _id: appt._id,
+      ngayKham: appt.ngayKham,
+      khungGio: appt.khungGio,
+      bacSi: appt.bacSiId ? {
+        _id: appt.bacSiId._id,
+        hoTen: appt.bacSiId.hoTen,
+        chuyenKhoa: appt.bacSiId.chuyenKhoa,
+        phongKham: appt.bacSiId.phongKhamId || null
+      } : null
+    };
+    res.json(out);
   }catch(err){ return next(err); }
 });
