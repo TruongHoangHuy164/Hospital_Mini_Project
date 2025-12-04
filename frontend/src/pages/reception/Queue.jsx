@@ -51,43 +51,22 @@ export default function QueuePage(){
     if(!searchQuery.trim()){ setSearchError('Vui lòng nhập SĐT hoặc mã BHYT'); return; }
     setSearching(true); setSearchError(''); setSearchResult(null);
     try{
-      // Tìm bệnh nhân trước
-      const patientRes = await fetch(`${API_URL}/api/patients/search?q=${encodeURIComponent(searchQuery.trim())}&limit=10`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')||''}` }
-      });
-      const patients = await patientRes.json();
-      if(!patientRes.ok) throw patients;
-      
-      if(patients.length === 0){
-        setSearchError('Không tìm thấy bệnh nhân với thông tin này');
-        return;
-      }
-      
-      // Lấy lịch hẹn của bệnh nhân đầu tiên
-      const patient = patients[0];
-      const today = new Date().toISOString().slice(0,10);
-      const appointmentRes = await fetch(`${API_URL}/api/booking/queues?date=${today}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')||''}` }
-      });
-      const allAppointments = await appointmentRes.json();
-      if(!appointmentRes.ok) throw allAppointments;
-      
-      // Tìm lịch của bệnh nhân này
-      const appointment = allAppointments.find(a => {
-        if(patient._type === 'benhNhan'){
-          return String(a.benhNhanId) === String(patient._id);
-        } else {
-          return String(a.hoSoBenhNhanId) === String(patient._id);
-        }
+      // Tìm trực tiếp trong danh sách items đã load
+      const query = searchQuery.trim().toLowerCase();
+      const appointment = items.find(a => {
+        const sdt = a.benhNhan?.soDienThoai?.toLowerCase() || '';
+        const bhyt = a.benhNhan?.maBHYT?.toLowerCase() || '';
+        const hoTen = a.benhNhan?.hoTen?.toLowerCase() || '';
+        return sdt.includes(query) || bhyt.includes(query) || hoTen.includes(query);
       });
       
       if(!appointment){
-        setSearchError('Bệnh nhân chưa có lịch hẹn hôm nay');
+        setSearchError('Không tìm thấy bệnh nhân với thông tin này trong danh sách hôm nay');
         return;
       }
       
       setSearchResult({
-        patient,
+        patient: appointment.benhNhan,
         appointment,
         soThuTu: appointment.soThuTu,
         tenBacSi: appointment.bacSi?.hoTen || 'Chưa xác định',
