@@ -59,7 +59,6 @@ import PharmacyInventory from './pages/pharmacy/Inventory'
 import PharmacyRevenueStats from './pages/pharmacy/Stats'
 import Intake from './pages/reception/Intake'
 import NewPatient from './pages/reception/NewPatient'
-import ReceptionAppointments from './pages/reception/Appointments'
 import QueuePage from './pages/reception/Queue'
 import Lookup from './pages/reception/Lookup'
 import ReceptionPrint from './pages/reception/Print'
@@ -92,6 +91,7 @@ import AboutPage from './pages/about/Index'
 import NewsIndex from './pages/news/Index'
 import NewsDetail from './pages/news/Detail'
 import ReviewsPage from './pages/reviews/Index'
+import DirectBooking from './pages/reception/DirectBooking';
 
 export default function App() {
   return (
@@ -165,7 +165,7 @@ export default function App() {
         <Route path="dashboard" element={<ReceptionDashboard />} />
         <Route path="intake" element={<Intake />} />
         <Route path="patients/new" element={<NewPatient />} />
-        <Route path="appointments" element={<ReceptionAppointments />} />
+        {/* Removed deprecated /reception/appointments route; use direct-booking instead */}
   <Route path="queue" element={<QueuePage />} />
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />
@@ -174,6 +174,7 @@ export default function App() {
         <Route path="my-schedule" element={<MySchedule />} />
         <Route path="schedule" element={<ReceptionSchedule />} />
         <Route path="doctors" element={<ReceptionDoctors />} />
+          <Route path="direct-booking" element={<DirectBooking />} />
       </Route>
 
       <Route path="/lab" element={<RequireLab><LabLayout /></RequireLab>}>

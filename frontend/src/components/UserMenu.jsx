@@ -66,7 +66,7 @@ const UserMenu = () => {
             </Link>
             
             <Link 
-              to="/user/my-appointments" 
+              to="/booking/history" 
               className="user-menu__item"
               onClick={handleMenuClick}
             >

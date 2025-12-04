@@ -95,7 +95,7 @@ const UserMenuSimple = () => {
             </Link>
             
             <Link 
-              to="/user/my-appointments" 
+              to="/booking/history" 
               onClick={closeMenu}
               style={{
                 display: 'flex',

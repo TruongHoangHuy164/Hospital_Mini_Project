@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
 import { getReceptionBookingStats, getReceptionPharmacyStats } from '../../api/reception';
+import { privateApi as api } from '../../api/axios';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
@@ -28,18 +29,37 @@ export default function ReceptionRevenueStats(){
       try{
         // Lấy thống kê đặt lịch (150k/booking thành công) từ endpoint admin đã có
         const resp = await getReceptionBookingStats({ year, month });
-        const bookingByDay = resp?.days || resp?.data?.days || [];
+        // Chuẩn hoá dữ liệu đặt lịch: fallback doanh thu = count * 150000 nếu backend không trả
+        const bookingByDayRaw = resp?.days || resp?.data?.days || [];
+        const bookingByDay = bookingByDayRaw.map(d => ({
+          // Hỗ trợ cả dạng day số (3) và day chuỗi (YYYY-MM-DD)
+          day: (typeof d.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.day)) ? Number(d.day.slice(8,10)) : Number(d.day || 0),
+          count: typeof d.count === 'number' ? d.count : (typeof d.bookings === 'number' ? d.bookings : 0),
+          revenue: typeof d.revenue === 'number' ? d.revenue : (typeof d.count === 'number' ? d.count*150000 : (typeof d.bookings === 'number' ? d.bookings*150000 : 0))
+        }));
         // Lấy doanh thu dịch vụ (pharmacy) theo ngày qua endpoint dành cho lễ tân
         const pharmacyStats = await getReceptionPharmacyStats({ year, month });
         const labDayData = (pharmacyStats?.days || pharmacyStats?.data?.days || []).map(d=> ({ day:d.day, labRevenue: d.labRevenue||0 }));
         const daysInMonth = new Date(year, month, 0).getDate();
         const merged = Array.from({length:daysInMonth}, (_,i)=>{
           const d=i+1;
-          const book = bookingByDay.find(x=> x.day===d) || { count:0, revenue:0 };
+          const book = bookingByDay.find(x=> Number(x.day)===d) || { count:0, revenue:0 };
           const lab = labDayData.find(x=> x.day===d) || { labRevenue:0 };
           const revenue = (book.revenue||0) + (lab.labRevenue||0);
           return { day:d, bookings: book.count||0, bookingRevenue: book.revenue||0, labRevenue: lab.labRevenue||0, revenue };
         });
+        // Override today's data based on actual appointments of today
+        const todayStr = new Date().toISOString().slice(0,10);
+        const todayDayNum = Number(todayStr.slice(8,10));
+        try{
+          const { data: todayAppts } = await api.get('/booking/appointments', { params: { date: todayStr } });
+          const todayCount = Array.isArray(todayAppts) ? todayAppts.length : 0;
+          const todayRevenue = todayCount * 150000;
+          const idx = merged.findIndex(x=> x.day === todayDayNum);
+          if(idx >= 0){
+            merged[idx] = { ...merged[idx], bookings: todayCount, bookingRevenue: todayRevenue, revenue: todayRevenue + (merged[idx].labRevenue||0) };
+          }
+        }catch(e){ /* ignore fallback to booking stats */ }
         const monthTotal = merged.reduce((s,x)=> s+x.revenue,0);
         if(!cancelled){ setDays(merged); setTotal(monthTotal); }
       }catch(e){

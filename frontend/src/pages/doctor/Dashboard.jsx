@@ -373,7 +373,12 @@ export default function DoctorDashboard() {
       const json = await res.json();
       if(!res.ok) throw json;
       setRxItems([]); setRxResults([]); setRxQuery('');
-      alert('Đã kê đơn - Bệnh nhân chuyển sang chờ lấy thuốc (WAITING_FOR_MEDICINE)');
+      // Sau khi kê đơn: chuyển trạng thái hồ sơ sang 'hoan_tat' và cập nhật danh sách
+      try{
+        const res2 = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/status`, { method:'PUT', headers, body: JSON.stringify({ trangThai: 'hoan_tat' }) });
+        const js2 = await res2.json(); if(!res2.ok) throw js2;
+      }catch(e){ /* nếu API chưa có, bỏ qua */ }
+      alert('Đã kê đơn - Hồ sơ chuyển sang trạng thái Hoàn tất (Khám xong)');
       await loadPrescriptions(selectedCase._id);
       await loadTodayPatients();
     }catch(e){ alert(e?.message || 'Kê đơn thất bại'); }
@@ -382,26 +387,8 @@ export default function DoctorDashboard() {
   async function completeVisit(){
     try{
       if(!selectedCase?._id) return;
-      const res = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/complete`, { method:'POST', headers });
-      const json = await res.json();
-      if(!res.ok) throw json;
-      
-      // Làm sạch trạng thái
-      setSelectedCase(null);
-      setCaseDetail(null);
-      setLabs([]);
-      setHistory([]);
-      setPrescriptions([]);
-      setRxItems([]);
-      setClinical({ trieuChung: '', khamLamSang: '', huyetAp: '', nhipTim: '', nhietDo: '', canNang: '', chieuCao: '' });
-      setActiveTab('call');
-      
-      // Tải lại danh sách bệnh nhân và thống kê
-      await loadTodayPatients();
-      await loadTodayStats();
-      
-      // Thông báo thành công
-      alert('✅ Đã kết thúc ca khám. Bấm "Gọi tiếp" để tiếp nhận bệnh nhân tiếp theo.');
+      // Không dùng nút kết thúc ca nữa
+      alert('Chức năng kết thúc ca đã được bỏ. Vui lòng kê đơn để hoàn tất.');
     }catch(e){ alert(e?.message || 'Lỗi kết thúc ca'); }
   }
 
@@ -415,7 +402,7 @@ export default function DoctorDashboard() {
       'da_co_ket_qua': '✓ Đã có kết quả',
       'cho_ke_don': '💊 Chờ kê đơn',
       'WAITING_FOR_MEDICINE': '⏳ Chờ lấy thuốc',
-      'hoan_tat': '✅ Hoàn tất'
+      'hoan_tat': '✅ Khám xong'
     };
     return statuses[caseDetail.trangThai] || caseDetail.trangThai || 'N/A';
   }
@@ -641,13 +628,6 @@ export default function DoctorDashboard() {
                 <div className="ms-auto d-flex align-items-center gap-2 pe-3">
                   <small className="text-muted">Trạng thái:</small>
                   <small className="fw-semibold text-success">{getCaseStatus()}</small>
-                  <button 
-                    className="btn btn-sm btn-outline-danger"
-                    onClick={completeVisit}
-                    title="Kết thúc ca khám"
-                  >
-                    <i className="bi bi-check-circle me-1"></i>Kết thúc
-                  </button>
                 </div>
               )}
             </nav>
@@ -694,7 +674,7 @@ export default function DoctorDashboard() {
                         
                         // Kiểm tra trạng thái tổng thể của LichKham
                         if(it.trangThai === 'hoan_tat') {
-                          stLabel = '✅ Hoàn tất';
+                          stLabel = '✅ Khám xong';
                           stBadge = 'bg-success';
                         } else if(selectedCase && caseDetail?.benhNhanId?._id === it.benhNhan?._id) {
                           stLabel = 'Đang khám';

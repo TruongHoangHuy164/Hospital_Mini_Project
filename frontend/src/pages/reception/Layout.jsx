@@ -25,7 +25,6 @@ export default function ReceptionLayout() {
               <li className="nav-item mb-2"><NavLink to="/reception/dashboard" className={({isActive})=> linkClass(isActive)}><i className="bi bi-speedometer2 me-2"></i>Bảng điều khiển</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/intake" className={({isActive})=> linkClass(isActive)}><i className="bi bi-person-plus me-2"></i>Tiếp nhận bệnh nhân</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/queue" className={({isActive})=> linkClass(isActive)}><i className="bi bi-123 me-2"></i>Cấp số thứ tự & in STT</NavLink></li>
-              <li className="nav-item mb-2"><NavLink to="/reception/appointments" className={({isActive})=> linkClass(isActive)}><i className="bi bi-calendar-check me-2"></i>Đặt Lịch</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/doctors" className={({isActive})=> linkClass(isActive)}><i className="bi bi-people me-2"></i>Quản Lý Lịch Hẹn</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/payments" className={({isActive})=> linkClass(isActive)}><i className="bi bi-cash-stack me-2"></i>Thu tiền dịch vụ</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/stats" className={({isActive})=> linkClass(isActive)}><i className="bi bi-graph-up-arrow me-2"></i>Thống kê doanh thu</NavLink></li>

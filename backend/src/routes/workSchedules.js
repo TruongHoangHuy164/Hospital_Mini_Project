@@ -36,9 +36,28 @@ function isInNextMonth(dayStr){
   if(!isDayStr(dayStr)) return false;
   return dayStr.slice(0,7) === getNextMonthYearMonth();
 }
+// Helpers: tháng hiện tại (YYYY-MM)
+function getCurrentMonthYearMonth(){
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2,'0');
+  return `${y}-${m}`;
+}
+function isInCurrentMonth(dayStr){
+  if(!isDayStr(dayStr)) return false;
+  return dayStr.slice(0,7) === getCurrentMonthYearMonth();
+}
 
 // Kiểm tra và báo lỗi nếu ngày không thuộc tháng kế tiếp
-function assertNextMonth(dayStr){
+function assertAllowedMonthForAction(dayStr, req){
+  // Admin: cho phép tháng hiện tại
+  if(req.user?.role === 'admin'){
+    if(isInCurrentMonth(dayStr) || isInNextMonth(dayStr)) return; // allow current or next
+    const err = new Error(`Admin chỉ chỉnh tháng hiện tại (${getCurrentMonthYearMonth()}) hoặc tháng tiếp theo (${getNextMonthYearMonth()})`);
+    err.status = 400;
+    throw err;
+  }
+  // Non-admin: chỉ tháng tiếp theo
   if(!isInNextMonth(dayStr)){
     const allowed = getNextMonthYearMonth();
     const err = new Error(`Chỉ được đăng ký lịch cho tháng tiếp theo (${allowed})`);
@@ -96,8 +115,8 @@ router.post('/', async (req, res, next) => {
     if(!['sang','chieu','toi'].includes(shift)) return res.status(400).json({ message: 'shift không hợp lệ' });
     if(shiftType && !['lam_viec','truc','nghi'].includes(shiftType)) return res.status(400).json({ message: 'shiftType không hợp lệ' });
   if(!isDayStr(day)) return res.status(400).json({ message: 'day không hợp lệ' });
-    // Enforce next month restriction
-    try { assertNextMonth(day); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+    // Enforce allowed month (admin: current/next; others: next only)
+    try { assertAllowedMonthForAction(day, req); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
     const user = await User.findById(userId).select('role');
     if(!user) return res.status(404).json({ message: 'User không tồn tại' });
@@ -134,7 +153,7 @@ router.put('/:id', async (req, res, next) => {
     const existing = await WorkSchedule.findById(req.params.id);
     if(!existing) return res.status(404).json({ message: 'Không tìm thấy' });
     const targetDay = update.day || existing.day;
-    try { assertNextMonth(targetDay); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
+    try { assertAllowedMonthForAction(targetDay, req); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
     if(req.user.role !== 'admin' && String(existing.userId) !== String(req.user.id)){
       return res.status(403).json({ message: 'Không được sửa lịch của người khác' });
@@ -172,14 +191,24 @@ router.post('/bulk', async (req, res, next) => {
     const { items, upsert = true } = req.body || {};
     if(!Array.isArray(items) || !items.length) return res.status(400).json({ message: 'items trống' });
     const ops = [];
-    const allowedMonth = getNextMonthYearMonth();
+    const allowedNextMonth = getNextMonthYearMonth();
     const isAdmin = req.user.role === 'admin';
     for(const it of items){
       if(!it.userId || !it.role || !it.day || !it.shift) continue;
       if(!['doctor','reception','lab','cashier','nurse'].includes(it.role)) continue;
       if(!['sang','chieu','toi'].includes(it.shift)) continue;
   if(!isDayStr(it.day)) continue;
-      if(it.day.slice(0,7) !== allowedMonth) return res.status(400).json({ message: `Tất cả day phải thuộc tháng tiếp theo (${allowedMonth})` });
+      const prefix = it.day.slice(0,7);
+      if(isAdmin){
+        const curr = getCurrentMonthYearMonth();
+        if(prefix !== allowedNextMonth && prefix !== curr){
+          return res.status(400).json({ message: `Admin chỉ bulk cho tháng hiện tại (${curr}) hoặc tháng tiếp theo (${allowedNextMonth})` });
+        }
+      } else {
+        if(prefix !== allowedNextMonth){
+          return res.status(400).json({ message: `Tất cả day phải thuộc tháng tiếp theo (${allowedNextMonth})` });
+        }
+      }
   try { await ensureWindowOpenForUser(); } catch(e){ return res.status(e.status||400).json({ message: e.message }); }
       if(!isAdmin && String(it.userId) !== String(req.user.id)) return res.status(403).json({ message: 'Không được bulk lịch cho người khác' });
   const doc = { ...it };
@@ -247,7 +276,24 @@ router.get('/config/next', async (req,res,next)=>{
   try {
     const nextMonth = getNextMonthYearMonth();
     const cfg = await ScheduleConfig.findOne({ month: nextMonth });
-    res.json(cfg || { month: nextMonth, openFrom: `${new Date().toISOString().slice(0,7)}-15`, note: 'default (fallback)' });
+    // Mặc định khung giờ nếu chưa cấu hình trong DB
+    const defaultShiftHours = {
+      sang: { start: '07:30', end: '11:30' },
+      chieu: { start: '13:00', end: '17:00' },
+      toi: { start: '18:00', end: '22:00' }
+    };
+    if(!cfg){
+      return res.json({
+        month: nextMonth,
+        openFrom: `${new Date().toISOString().slice(0,7)}-15`,
+        shiftHours: defaultShiftHours,
+        note: 'default (fallback)'
+      });
+    }
+    // Trả về shiftHours nếu có, nếu không dùng mặc định
+    const out = cfg.toObject();
+    if(!out.shiftHours) out.shiftHours = defaultShiftHours;
+    res.json(out);
   } catch(err){ next(err); }
 });
 
@@ -256,19 +302,41 @@ router.put('/config/next', async (req,res,next)=>{
   try {
     if(req.user.role !== 'admin') return res.status(403).json({ message: 'Chỉ admin cấu hình' });
     const nextMonth = getNextMonthYearMonth();
-    const { openFrom, note } = req.body || {};
+    const { openFrom, note, shiftHours } = req.body || {};
     if(!openFrom || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(openFrom)) return res.status(400).json({ message: 'openFrom phải YYYY-MM-DD' });
     // openFrom must be in current month or earlier (cannot be after month start?) allow any day before nextMonth month  start
     const todayPrefix = new Date().toISOString().slice(0,7); // current YYYY-MM
     if(openFrom.slice(0,7) !== todayPrefix){
       return res.status(400).json({ message: 'openFrom phải thuộc tháng hiện tại' });
     }
+    // Validate shiftHours if provided
+    if(shiftHours){
+      const validatePair = (p)=> p && typeof p.start === 'string' && typeof p.end === 'string' && /^[0-9]{2}:[0-9]{2}$/.test(p.start) && /^[0-9]{2}:[0-9]{2}$/.test(p.end);
+      if(!(validatePair(shiftHours.sang) && validatePair(shiftHours.chieu) && validatePair(shiftHours.toi))){
+        return res.status(400).json({ message: 'shiftHours phải đủ sang/chieu/toi với định dạng HH:MM' });
+      }
+    }
     const cfg = await ScheduleConfig.findOneAndUpdate(
       { month: nextMonth },
-      { month: nextMonth, openFrom, note },
+      { month: nextMonth, openFrom, note, ...(shiftHours ? { shiftHours } : {}) },
       { new: true, upsert: true }
     );
     res.json(cfg);
+  } catch(err){ next(err); }
+});
+
+// GET /api/work-schedules/shift-hours -> Trả khung giờ ca làm việc hiệu lực cho tháng kế tiếp
+router.get('/shift-hours', async (req,res,next)=>{
+  try {
+    const nextMonth = getNextMonthYearMonth();
+    const cfg = await ScheduleConfig.findOne({ month: nextMonth });
+    const defaultShiftHours = {
+      sang: { start: '07:30', end: '11:30' },
+      chieu: { start: '13:00', end: '17:00' },
+      toi: { start: '18:00', end: '22:00' }
+    };
+    const shiftHours = cfg?.shiftHours || defaultShiftHours;
+    res.json({ month: nextMonth, shiftHours });
   } catch(err){ next(err); }
 });
 

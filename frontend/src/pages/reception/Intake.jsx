@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { fetchProvinces, fetchDistricts, fetchWards } from '../../api/location';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
@@ -267,7 +268,7 @@ export default function Intake(){
             <div className="mt-3">
               <div className="mb-2"><strong>Tài khoản:</strong> {lookup.user?.name} — {lookup.user?.phone || '-'} {lookup.user?.email ? `— ${lookup.user.email}` : ''}</div>
               {lookup.selfPatient ? (
-                <div className="mb-2">Hồ sơ chính: <a className="btn btn-sm btn-outline-primary" href={`/reception/appointments?benhNhanId=${lookup.selfPatient._id}`}>Đặt lịch cho người này</a></div>
+                <div className="mb-2">Hồ sơ chính: <Link className="btn btn-sm btn-outline-primary" to={`/reception/direct-booking?benhNhanId=${lookup.selfPatient._id}`}>Đặt lịch cho người này</Link></div>
               ) : (
                 <div className="mb-2 text-muted">Chưa có hồ sơ chính</div>
               )}
@@ -278,7 +279,7 @@ export default function Intake(){
                 {(lookup.relatives||[]).map(r => (
                   <li className="list-group-item d-flex justify-content-between align-items-center" key={r._id}>
                     <span>{r.hoTen} — {r.soDienThoai||'-'} — {r.quanHe||''}</span>
-                    <a className="btn btn-sm btn-outline-primary" href={`/reception/appointments?hoSoBenhNhanId=${r._id}`}>Đặt lịch</a>
+                    <Link className="btn btn-sm btn-outline-primary" to={`/reception/direct-booking?hoSoBenhNhanId=${r._id}`}>Đặt lịch</Link>
                   </li>
                 ))}
               </ul>
@@ -458,9 +459,9 @@ export default function Intake(){
                 <td>{p.hoTen}</td><td>{p.soDienThoai||'-'}</td><td>{p.ngaySinh? new Date(p.ngaySinh).toLocaleDateString(): '-'}</td>
                 <td>
                   {p._type === 'profile' ? (
-                    <a className="btn btn-sm btn-outline-primary" href={`/reception/appointments?hoSoBenhNhanId=${p._id}`}>Đặt lịch</a>
+                    <a className="btn btn-sm btn-outline-primary" href={`/reception/direct-booking?hoSoBenhNhanId=${p._id}`}>Đặt lịch</a>
                   ) : (
-                    <a className="btn btn-sm btn-outline-primary" href={`/reception/appointments?benhNhanId=${p._id}`}>Đặt lịch</a>
+                    <a className="btn btn-sm btn-outline-primary" href={`/reception/direct-booking?benhNhanId=${p._id}`}>Đặt lịch</a>
                   )}
                 </td>
               </tr>
