@@ -108,6 +108,8 @@ router.get('/my-appointments', auth, async (req, res, next) => {
       ngayKham: ap.ngayKham,
       khungGio: ap.khungGio,
       trangThai: ap.trangThai,
+      benhNhanId: ap.benhNhanId?._id || ap.benhNhanId || null,
+      hoSoBenhNhanId: ap.hoSoBenhNhanId?._id || ap.hoSoBenhNhanId || null,
       // Determine patient name from either populated field
       benhNhan: {
         hoTen: ap.hoSoBenhNhanId ? ap.hoSoBenhNhanId.hoTen : (ap.benhNhanId ? ap.benhNhanId.hoTen : 'N/A')
@@ -149,6 +151,7 @@ router.get('/my-results', auth, async (req, res, next) => {
     const items = labs.map(l => ({
       _id: l._id,
       hoSoKhamId: l.hoSoKhamId?._id || null,
+      benhNhanId: l.hoSoKhamId?.benhNhanId || null,
       loaiChiDinh: l.loaiChiDinh,
       trangThai: l.trangThai,
       ketQua: l.ketQua,
@@ -182,6 +185,7 @@ router.get('/my-cases', auth, async (req, res, next) => {
     ]);
     const mapped = items.map(c => ({
       _id: c._id,
+      benhNhanId: c.benhNhanId,
       chanDoan: c.chanDoan || '',
       huongDieuTri: c.huongDieuTri || '',
       trieuChung: c.trieuChung || '',

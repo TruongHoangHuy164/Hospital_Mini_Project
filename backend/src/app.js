@@ -32,7 +32,25 @@ const adminNewsRouter = require('./routes/adminNews');
 
 const app = express();
 
-app.use(cors({ origin: process.env.ORIGIN || '*' }));
+// CORS: allow localhost dev origins (vite/react, flutter web) and configurable ORIGIN
+const allowedOrigins = new Set([
+  'http://localhost:5173', // Vite default
+  'http://127.0.0.1:5173',
+]);
+if (process.env.ORIGIN) allowedOrigins.add(process.env.ORIGIN);
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow non-browser requests (no origin)
+    if (!origin) return callback(null, true);
+    // Allow any localhost dev port (flutter web uses random ephemeral port)
+    if (/^http:\/\/localhost:\d+$/i.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/i.test(origin)) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.has(origin)) return callback(null, true);
+    return callback(new Error('CORS blocked for origin: ' + origin));
+  },
+  credentials: true,
+}));
 // Increase body size limits to support large JSON imports for pharmacy inventory
 app.use(express.json({ limit: process.env.BODY_LIMIT || '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: process.env.BODY_LIMIT || '20mb' }));
