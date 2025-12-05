@@ -16,6 +16,12 @@ macos/Flutter/GeneratedPluginRegistrant.swift
 windows/flutter/generated_plugin_registrant.cc
 windows/flutter/generated_plugin_registrant.h
 windows/flutter/generated_plugins.cmake
+linux/flutter/ephemeral/
+**/generated_plugin_registrant.*
+**/generated_plugins.cmake
+**/Flutter/GeneratedPluginRegistrant.*
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
 
 # IDE/editor junk
 .idea/
@@ -29,6 +35,17 @@ windows/flutter/generated_plugins.cmake
 # Note: For application projects, it's generally recommended to commit pubspec.lock.
 # Uncomment the line below only if you intentionally want to ignore it.
 # pubspec.lock
+
+# Android specific
+android/.gradle/
+android/app/build/
+
+# iOS specific
+ios/Flutter/AppFrameworkInfo.plist
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Runner.xcodeproj/xcshareddata/xcschemes/*
+ios/Runner.xcworkspace/xcshareddata/
 # Miscellaneous
 *.class
 *.log

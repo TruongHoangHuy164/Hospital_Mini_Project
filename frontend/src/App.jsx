@@ -71,7 +71,6 @@ import ChangePassword from './pages/user/ChangePassword'
 import ProfileSimple from './pages/user/ProfileSimple'
 import ProfileDebug from './pages/user/ProfileDebug'
 import PasswordDebug from './pages/user/PasswordDebug'
-import ServerStatus from './components/ServerStatus'
 import RequireNurse from './pages/nurse/RequireNurse'
 import NurseLayout from './pages/nurse/Layout'
 import NurseDashboard from './pages/nurse/Dashboard'
@@ -96,7 +95,6 @@ import DirectBooking from './pages/reception/DirectBooking';
 export default function App() {
   return (
     <>
-      <ServerStatus />
       <React.Suspense fallback={<div className="text-center py-5"><div className="spinner-border text-primary" role="status" /><div className="mt-2 small text-muted">Đang tải...</div></div>}>
       <Routes>
       <Route element={<SiteLayout />}>
