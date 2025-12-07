@@ -37,9 +37,18 @@ router.get('/doctors', async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit||'50',10), 200);
     const filter = {};
     if (q) filter.hoTen = { $regex: q, $options: 'i' };
-    // Optional filters: by specialty name (string) and clinic id
-    const chuyenKhoa = (req.query.chuyenKhoa || '').trim();
-    if (chuyenKhoa) filter.chuyenKhoa = chuyenKhoa;
+    // Filters: by specialty (accept id or name) and clinic id
+    let chuyenKhoa = (req.query.chuyenKhoa || '').trim();
+    if (chuyenKhoa) {
+      // If it's an ObjectId, map to specialty name
+      if (/^[0-9a-fA-F]{24}$/.test(chuyenKhoa)) {
+        try {
+          const spec = await ChuyenKhoa.findById(chuyenKhoa).lean();
+          if (spec && spec.ten) chuyenKhoa = spec.ten;
+        } catch (_) { /* ignore */ }
+      }
+      filter.chuyenKhoa = chuyenKhoa;
+    }
     const phongKhamId = req.query.phongKhamId;
     if (phongKhamId) filter.phongKhamId = phongKhamId;
     const items = await BacSi.find(filter)
