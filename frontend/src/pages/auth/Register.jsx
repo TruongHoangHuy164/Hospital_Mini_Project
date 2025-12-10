@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import ServerStatusCheck from '../../components/ServerStatusCheck';
 
 export default function Register() {
   const [name, setName] = useState('');
@@ -34,7 +33,6 @@ export default function Register() {
   return (
     <div className="container my-5" style={{ maxWidth: 480 }}>
       <h3 className="mb-3">Đăng ký</h3>
-      <ServerStatusCheck />
       {error && <div className="alert alert-danger">{error}</div>}
       <form onSubmit={onSubmit}>
         <div className="mb-3">

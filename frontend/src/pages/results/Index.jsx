@@ -8,6 +8,9 @@ export default function MyResults(){
   const [casesTotalPages, setCasesTotalPages] = useState(1);
   const [caseLoading, setCaseLoading] = useState(false);
   const [caseError, setCaseError] = useState('');
+  const [patients, setPatients] = useState([]);
+  const [patientLoading, setPatientLoading] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState('');
   const [selectedCaseId, setSelectedCaseId] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
@@ -24,12 +27,22 @@ export default function MyResults(){
       setCases(json.items||[]);
       setCasesPage(json.page||1);
       setCasesTotalPages(json.totalPages||1);
-      // Auto select if 1 or 2 cases
-      if((json.items||[]).length>0 && (json.items||[]).length<=2){
-        setSelectedCaseId(json.items[0]._id);
-      }
+      // Reset selection when page changes
+      setSelectedCaseId(null);
     }catch(e){ setCaseError(e?.message||'Lỗi tải hồ sơ'); }
     finally{ setCaseLoading(false); }
+  }
+
+  async function loadPatients(){
+    setPatientLoading(true);
+    try{
+      const res = await fetch(`${API_URL}/api/booking/patients`, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')||''}` } });
+      const json = await res.json();
+      if(!res.ok) throw json;
+      const items = Array.isArray(json) ? json : [];
+      setPatients(items.map(p => ({ id: p._id, label: p.hoTen })));
+    }catch(e){ /* silent */ }
+    finally{ setPatientLoading(false); }
   }
 
   async function loadCaseDetail(id){
@@ -44,22 +57,47 @@ export default function MyResults(){
     finally{ setDetailLoading(false); }
   }
 
-  useEffect(()=>{ loadCases(1); },[]);
+  useEffect(()=>{ loadCases(1); loadPatients(); },[]);
   useEffect(()=>{ if(selectedCaseId) loadCaseDetail(selectedCaseId); }, [selectedCaseId]);
 
+  // Filter cases by selected patient
+  const filteredCases = useMemo(() => {
+    if (!selectedPatientId) return cases;
+    return cases.filter(c => String(c.benhNhanId || '') === String(selectedPatientId));
+  }, [cases, selectedPatientId]);
+
+  // Auto-select first case when filtered list updates
+  useEffect(() => {
+    if (filteredCases.length > 0) {
+      setSelectedCaseId(filteredCases[0]._id);
+    } else {
+      setSelectedCaseId(null);
+    }
+  }, [filteredCases]);
+
   // Group by hoSoKhamId (medical record). Fallback group key by ngayKham date string.
-  const showCaseList = cases.length > 2;
+  const showCaseList = filteredCases.length > 2;
 
   return (
     <div className="container my-4">
       <h3>Tra cứu kết quả</h3>
       {caseError && <div className="alert alert-danger">{caseError}</div>}
+      {/* Patient selector */}
+      {!caseLoading && (
+        <div className="mb-3">
+          <label className="form-label">Chọn hồ sơ</label>
+          <select className="form-select" value={selectedPatientId} onChange={e=>setSelectedPatientId(e.target.value)}>
+            <option value="">Tất cả hồ sơ</option>
+            {patients.map(p => (<option key={p.id} value={p.id}>{p.label}</option>))}
+          </select>
+        </div>
+      )}
       {showCaseList && (
         <div className="mb-3">
           <div className="fw-semibold mb-2">Danh sách hồ sơ khám</div>
           {caseLoading && <div className="text-muted">Đang tải...</div>}
           <div className="row g-2">
-            {cases.map(c => (
+            {filteredCases.map(c => (
               <div key={c._id} className="col-md-4">
                 <button type="button" className={`btn w-100 text-start ${selectedCaseId===c._id?'btn-primary':'btn-outline-primary'}`} onClick={()=> setSelectedCaseId(c._id)}>
                   <div className="d-flex flex-column">
@@ -69,7 +107,7 @@ export default function MyResults(){
                 </button>
               </div>
             ))}
-            {cases.length===0 && !caseLoading && <div className="col-12 text-muted">Không có hồ sơ</div>}
+            {filteredCases.length===0 && !caseLoading && <div className="col-12 text-muted">Không có hồ sơ</div>}
           </div>
         </div>
       )}
@@ -159,7 +197,7 @@ export default function MyResults(){
           )}
         </div>
       )}
-      {!selectedCaseId && !caseLoading && cases.length>0 && !showCaseList && <div className="alert alert-info">Tự động chọn hồ sơ gần nhất.</div>}
+      {!selectedCaseId && !caseLoading && filteredCases.length>0 && !showCaseList && <div className="alert alert-info">Tự động chọn hồ sơ gần nhất.</div>}
       <div className="d-flex justify-content-between align-items-center mt-3">
         <button disabled={caseLoading || casesPage<=1} className="btn btn-outline-secondary" onClick={()=>loadCases(casesPage-1)}>Trang trước</button>
         <span>Trang {casesPage}/{casesTotalPages}</span>

@@ -20,6 +20,7 @@ export default function MyAppointments() {
   const { isAuthenticated } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPatientId, setSelectedPatientId] = useState('');
 
   const headers = useMemo(() => ({
     'Content-Type': 'application/json',
@@ -36,7 +37,7 @@ export default function MyAppointments() {
           throw new Error('Failed to fetch appointments');
         }
         const data = await response.json();
-        setAppointments(data);
+        setAppointments(data.items || []);
       } catch (error) {
         toast.error(error.message || 'Không thể tải lịch khám.');
       } finally {
@@ -47,16 +48,42 @@ export default function MyAppointments() {
     fetchAppointments();
   }, [isAuthenticated, headers]);
 
+  const patients = useMemo(() => {
+    const map = new Map();
+    for (const appt of appointments) {
+      const id = appt.benhNhanId || appt.hoSoBenhNhanId || '';
+      const name = appt.benhNhan?.hoTen || '';
+      if (id && !map.has(id)) map.set(id, { id, label: name || `Hồ sơ ${String(id).slice(-4)}` });
+    }
+    return Array.from(map.values());
+  }, [appointments]);
+
+  const filteredAppointments = useMemo(() => {
+    if (!selectedPatientId) return appointments;
+    return appointments.filter(appt => String(appt.benhNhanId || appt.hoSoBenhNhanId || '') === String(selectedPatientId));
+  }, [appointments, selectedPatientId]);
+
   return (
     <div className="container py-4">
       <h3 className="mb-4">Lịch khám của tôi</h3>
+      {!loading && patients.length > 0 && (
+        <div className="mb-3">
+          <label className="form-label">Chọn hồ sơ</label>
+          <select className="form-select" value={selectedPatientId} onChange={e=>setSelectedPatientId(e.target.value)}>
+            <option value="">Tất cả hồ sơ</option>
+            {patients.map(p => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
       {loading ? (
         <p>Đang tải...</p>
-      ) : appointments.length === 0 ? (
+      ) : filteredAppointments.length === 0 ? (
         <p>Bạn chưa có lịch khám nào.</p>
       ) : (
         <div className="list-group">
-          {appointments.map((appt) => (
+          {filteredAppointments.map((appt) => (
             <div key={appt._id} className="list-group-item list-group-item-action flex-column align-items-start">
               <div className="d-flex w-100 justify-content-between">
                 <h5 className="mb-1">
@@ -71,11 +98,11 @@ export default function MyAppointments() {
                 <br />
                 <strong>Giờ khám:</strong> {appt.khungGio}
               </p>
-              {appt.soThuTu && (
-                 <p className="mb-0">
-                    <strong>Số thứ tự:</strong> <span className="fw-bold fs-5">{appt.soThuTu.so}</span>
-                 </p>
-              )}
+                {appt.soThuTu && (
+                  <p className="mb-0">
+                    <strong>Số thứ tự:</strong> <span className="fw-bold fs-5">{typeof appt.soThuTu === 'object' ? appt.soThuTu.so : appt.soThuTu}</span>
+                  </p>
+                )}
             </div>
           ))}
         </div>
