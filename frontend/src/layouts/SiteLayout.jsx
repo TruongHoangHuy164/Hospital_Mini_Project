@@ -4,6 +4,7 @@ import Topbar from '../components/Topbar';
 import Header from '../components/Header';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import ChatBubble from '../components/ChatBubble';
 
 export default function SiteLayout() {
   return (
@@ -12,6 +13,7 @@ export default function SiteLayout() {
       <Header />
       <Navbar />
       <Outlet />
+      <ChatBubble />
       <Footer />
     </>
   );

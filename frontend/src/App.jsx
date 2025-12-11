@@ -84,6 +84,7 @@ import CashierReports from './pages/cashier/Reports'
 import MySchedule from './pages/shared/MySchedule'
 import ReceptionSchedule from './pages/reception/Schedule'
 import ReceptionDoctors from './pages/reception/Doctors'
+import ReceptionChats from './pages/reception/Chats'
 import MedicinesIndex from './pages/medicines/Index'
 import ContactPage from './pages/contact/Index'
 import AboutPage from './pages/about/Index'
@@ -172,6 +173,7 @@ export default function App() {
         <Route path="my-schedule" element={<MySchedule />} />
         <Route path="schedule" element={<ReceptionSchedule />} />
         <Route path="doctors" element={<ReceptionDoctors />} />
+        <Route path="chats" element={<ReceptionChats />} />
           <Route path="direct-booking" element={<DirectBooking />} />
       </Route>
 
