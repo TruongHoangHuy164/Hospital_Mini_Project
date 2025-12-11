@@ -1,5 +1,7 @@
+// API xác thực & tài khoản người dùng (đăng ký/đăng nhập/token)
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+// Lấy token từ localStorage
 function getTokens() {
   return {
     accessToken: localStorage.getItem('accessToken') || '',
@@ -7,16 +9,19 @@ function getTokens() {
   };
 }
 
+// Lưu token vào localStorage
 function setTokens({ accessToken, refreshToken }) {
   if (accessToken) localStorage.setItem('accessToken', accessToken);
   if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
 }
 
+// Xoá token khỏi localStorage
 function clearTokens() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
 }
 
+// Hàm gọi fetch có gắn Bearer token và tự động refresh khi 401
 async function request(path, options = {}) {
   const url = `${API_URL}${path}`;
   console.log('Auth API Request:', url);
@@ -30,7 +35,7 @@ async function request(path, options = {}) {
     
     if (res.status === 401 && tokens.refreshToken && path !== '/api/auth/refresh') {
       console.log('Auth: Attempting token refresh...');
-      // try refresh
+      // Thử refresh token
       const r = await fetch(`${API_URL}/api/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,7 +44,7 @@ async function request(path, options = {}) {
       if (r.ok) {
         const data = await r.json();
         setTokens(data);
-        // retry original
+        // Thử lại yêu cầu ban đầu với accessToken mới
         const retryHeaders = { ...headers, Authorization: `Bearer ${data.accessToken}` };
         res = await fetch(url, { ...options, headers: retryHeaders });
       } else {
@@ -56,6 +61,7 @@ async function request(path, options = {}) {
   }
 }
 
+// Đăng ký tài khoản mới
 export async function register(name, email, phone, password) {
   try {
     console.log('Auth: Attempting registration for', email || phone);
@@ -87,6 +93,7 @@ export async function register(name, email, phone, password) {
   }
 }
 
+// Đăng nhập (email hoặc số điện thoại + mật khẩu)
 export async function login(email, password) {
   try {
     console.log('Auth: Attempting login for', email);
@@ -117,6 +124,7 @@ export async function login(email, password) {
   }
 }
 
+// Đăng xuất: gửi refreshToken (nếu có) và xoá token cục bộ
 export async function logout() {
   const { refreshToken } = getTokens();
   if (refreshToken) {
@@ -128,12 +136,14 @@ export async function logout() {
   clearTokens();
 }
 
+// Lấy thông tin hồ sơ người dùng hiện tại
 export async function getProfile() {
   const res = await request('/api/profile');
   if (!res.ok) throw await res.json();
   return res.json();
 }
 
+// Kiểm tra đã đăng nhập hay chưa
 export function isAuthenticated() {
   return !!localStorage.getItem('accessToken');
 }

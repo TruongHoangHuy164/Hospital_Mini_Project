@@ -1,3 +1,4 @@
+// API thanh toán: gọi backend để tạo/check thanh toán (MoMo, tiền mặt)
 import { privateApi, publicApi } from './axios';
 
 // Tạo yêu cầu thanh toán qua MoMo (gọi backend)
@@ -11,11 +12,13 @@ export async function createMomoPayment({ hoSoKhamId, amount, returnUrl, notifyU
 
 // (Tuỳ nhu cầu) endpoint kiểm tra trạng thái thanh toán
 export async function getPayment(paymentId) {
+// Kiểm tra trạng thái thanh toán (tuỳ nhu cầu)
   const resp = await privateApi.get(`/payments/${paymentId}`);
   return resp.data;
 }
 
 export async function createCashPayment({ hoSoKhamId, amount, orderRefs, targetType }){
+// Tạo thanh toán tiền mặt
   const resp = await privateApi.post('/payments/cash/create', { hoSoKhamId, amount, orderRefs, targetType });
   return resp.data;
 }
