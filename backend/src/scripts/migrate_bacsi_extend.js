@@ -9,14 +9,14 @@ async function main() {
 
   const BacSi = require('../models/BacSi');
 
-  // Ensure indexes for new fields (unique sparse for maSo, email)
+  // Đảm bảo index cho các trường mới (unique + sparse cho maSo, email)
   await BacSi.collection.createIndex({ maSo: 1 }, { unique: true, sparse: true });
   await BacSi.collection.createIndex({ email: 1 }, { unique: true, sparse: true });
   await BacSi.collection.createIndex({ chuyenKhoa: 1 });
   await BacSi.collection.createIndex({ phongKhamId: 1 });
   await BacSi.collection.createIndex({ trangThai: 1 });
 
-  // Update existing docs: set defaults where fields are missing
+  // Cập nhật các hồ sơ hiện có: đặt giá trị mặc định cho trường còn thiếu
   const updates = [
     { filter: { gioiTinh: { $exists: false } }, set: { gioiTinh: 'khac' } },
     { filter: { trangThai: { $exists: false } }, set: { trangThai: 'dang_cong_tac' } },
@@ -28,10 +28,10 @@ async function main() {
     console.log('Updated BacSi', u.set, '=>', res.modifiedCount);
   }
 
-  // Optional: if there are no doctors, seed one example
+  // Tuỳ chọn: nếu chưa có bác sĩ nào, seed một bản ghi mẫu
   const count = await BacSi.countDocuments();
   if (count === 0) {
-    // Need an existing PhongKham to reference; if none, create a default one
+    // Cần một PhongKham để tham chiếu; nếu chưa có, tạo mặc định
     const PhongKham = require('../models/PhongKham');
     let pk = await PhongKham.findOne();
     if (!pk) {

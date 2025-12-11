@@ -6,7 +6,7 @@ const LoaiThuoc = require('../models/LoaiThuoc');
 
 const router = express.Router();
 
-// Public: list active services, optional filter by specialty and query
+// Công khai: liệt kê dịch vụ đang hoạt động, hỗ trợ lọc theo chuyên khoa và từ khóa
 // GET /api/public/services?chuyenKhoaId=...&q=...
 router.get('/services', async (req, res, next) => {
   try{
@@ -19,7 +19,7 @@ router.get('/services', async (req, res, next) => {
   }catch(err){ next(err); }
 });
 
-// Optional: Public list of specialties (active only if you have such a flag). For now reuse all.
+// Công khai: danh sách chuyên khoa (nếu có cờ active thì chỉ lấy active; hiện tại lấy tất cả)
 // GET /api/public/specialties
 router.get('/specialties', async (req, res, next) => {
   try{
@@ -28,7 +28,7 @@ router.get('/specialties', async (req, res, next) => {
     res.json(items);
   }catch(err){ next(err); }
 });
-// Public: list doctors (basic info) for selection in UI
+// Công khai: liệt kê bác sĩ (thông tin cơ bản) để lựa chọn trong UI
 // GET /api/public/doctors?q=&limit=20
 router.get('/doctors', async (req, res, next) => {
   try{
@@ -37,10 +37,10 @@ router.get('/doctors', async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit||'50',10), 200);
     const filter = {};
     if (q) filter.hoTen = { $regex: q, $options: 'i' };
-    // Filters: by specialty (accept id or name) and clinic id
+    // Bộ lọc: theo chuyên khoa (chấp nhận id hoặc tên) và theo phòng khám
     let chuyenKhoa = (req.query.chuyenKhoa || '').trim();
     if (chuyenKhoa) {
-      // If it's an ObjectId, map to specialty name
+      // Nếu là ObjectId, tra ra tên chuyên khoa để lọc theo tên
       if (/^[0-9a-fA-F]{24}$/.test(chuyenKhoa)) {
         try {
           const spec = await ChuyenKhoa.findById(chuyenKhoa).lean();
@@ -59,7 +59,7 @@ router.get('/doctors', async (req, res, next) => {
   }catch(err){ next(err); }
 });
 
-// Public: list medicines (paginated)
+// Công khai: liệt kê thuốc (có phân trang)
 // GET /api/public/medicines?page=1&limit=20&q=&categoryId=&sortBy=ten_san_pham&order=asc
 router.get('/medicines', async (req, res, next) => {
   try {
@@ -97,7 +97,7 @@ router.get('/medicines', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Public: medicine detail
+// Công khai: chi tiết thuốc
 // GET /api/public/medicines/:id
 router.get('/medicines/:id', async (req, res, next) => {
   try {
@@ -107,7 +107,7 @@ router.get('/medicines/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// Public: medicine categories with counts
+// Công khai: danh mục thuốc kèm số lượng
 // GET /api/public/medicine-categories
 router.get('/medicine-categories', async (req, res, next) => {
   try {

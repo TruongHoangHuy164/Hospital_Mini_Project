@@ -12,7 +12,7 @@ const router = express.Router();
 // Quản lý các chỉ định cận lâm sàng (CanLamSang) và kết quả.
 // Lưu ý: Mặc định chỉ hiển thị các chỉ định đã thanh toán (`daThanhToan = true`).
 
-// List pending orders
+// Liệt kê các chỉ định theo trạng thái
 // GET /api/lab/orders?status=cho_thuc_hien|dang_thuc_hien|da_xong
 router.get('/orders', async (req, res, next) => {
   try {
@@ -25,15 +25,15 @@ router.get('/orders', async (req, res, next) => {
         { loaiChiDinh: { $regex: q, $options: 'i' } }
       ];
     }
-    // Date filtering for a specific day (YYYY-MM-DD)
+    // Lọc theo ngày cụ thể (YYYY-MM-DD)
     if (day) {
       const start = new Date(`${day}T00:00:00`);
       const end = new Date(start);
       end.setDate(end.getDate() + 1);
       filter.createdAt = { $gte: start, $lt: end };
     }
-    // By default only show lab orders that have been paid by reception (daThanhToan = true).
-    // If caller sets includeUnpaid=1, return unpaid as well (for admin/debug).
+    // Mặc định chỉ hiển thị các chỉ định đã được lễ tân thu phí (daThanhToan = true).
+    // Nếu truyền includeUnpaid=1, sẽ trả cả chỉ định chưa thanh toán (cho admin/kiểm tra).
     if(!req.query.includeUnpaid) filter.daThanhToan = true;
     const items = await CanLamSang.find(filter)
       .sort({ createdAt: -1 })
@@ -57,7 +57,7 @@ router.get('/orders', async (req, res, next) => {
   }
 });
 
-// Claim/Start an order
+// Nhận xử lý/Bắt đầu một chỉ định
 // POST /api/lab/orders/:id/start
 // PATCH /api/lab/orders/:id/start
 router.post('/orders/:id/start', async (req, res, next) => {
@@ -73,14 +73,14 @@ router.post('/orders/:id/start', async (req, res, next) => {
 router.patch('/orders/:id/start', async (req, res, next) => {
   try{
     const u = req.user;
-    // Cho phép nhấn bắt đầu bằng PATCH (tương tự POST)
+    // Cho phép bắt đầu bằng PATCH (tương tự POST)
     const doc = await CanLamSang.findByIdAndUpdate(req.params.id, { $set: { trangThai: 'dang_thuc_hien', nhanVienId: u?.id, ngayThucHien: new Date() } }, { new: true });
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy chỉ định' });
     res.json(doc);
   }catch(err){ return next(err); }
 });
 
-// Submit result
+// Gửi kết quả (hoàn thành)
 // POST /api/lab/orders/:id/complete
 router.post('/orders/:id/complete', async (req, res, next) => {
   try{
@@ -92,9 +92,9 @@ router.post('/orders/:id/complete', async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// Submit result with optional file upload
-// PATCH /api/lab/orders/:id/result (both with and without file)
-// Accepts: JSON { ketQua: string } or FormData with ketQua + file
+// Gửi kết quả kèm tùy chọn upload file
+// PATCH /api/lab/orders/:id/result (hỗ trợ cả có file và không có file)
+// Chấp nhận: JSON { ketQua: string } hoặc FormData có ketQua + file
 const resultsDir = path.join(__dirname, '..', 'uploads', 'lab-results');
 if(!fs.existsSync(resultsDir)) fs.mkdirSync(resultsDir, { recursive: true });
 
@@ -147,14 +147,15 @@ router.patch('/orders/:id/result', uploadResult.single('file'), async (req, res,
   }
 });
 
+// Thống kê tổng quan theo ngày
 // GET /api/lab/stats?date=YYYY-MM-DD
-// Returns: { paid, pending, done, ready }
+// Trả về: { paid, pending, done, ready }
 router.get('/stats', async (req, res, next) => {
   try {
     const { date } = req.query;
     const filter = {};
 
-    // If date provided, filter by that specific day
+    // Nếu có tham số date, lọc theo ngày cụ thể
     if (date) {
       const start = new Date(`${date}T00:00:00`);
       const end = new Date(start);
@@ -162,22 +163,22 @@ router.get('/stats', async (req, res, next) => {
       filter.createdAt = { $gte: start, $lt: end };
     }
 
-    // Only count lab orders that have been paid (daThanhToan = true)
+    // Chỉ tính các chỉ định đã thanh toán (daThanhToan = true)
     filter.daThanhToan = true;
 
     const stats = {
-      paid: 0,      // Status: 'cho_thuc_hien' (PAID, waiting)
-      pending: 0,   // Status: 'dang_thuc_hien' (in progress)
-      done: 0,      // Status: 'da_xong' (done, needs result)
-      ready: 0      // HoSoKham with trangThai 'RESULT_READY'
+      paid: 0,      // Trạng thái: 'cho_thuc_hien' (đã thanh toán, chờ thực hiện)
+      pending: 0,   // Trạng thái: 'dang_thuc_hien' (đang thực hiện)
+      done: 0,      // Trạng thái: 'da_xong' (đã xong, cần kết quả)
+      ready: 0      // Hồ sơ khám (HoSoKham) có trangThai 'RESULT_READY'
     };
 
-    // Count by CanLamSang status
+    // Đếm theo trạng thái của CanLamSang
     stats.paid = await CanLamSang.countDocuments({ ...filter, trangThai: 'cho_thuc_hien' });
     stats.pending = await CanLamSang.countDocuments({ ...filter, trangThai: 'dang_thuc_hien' });
     stats.done = await CanLamSang.countDocuments({ ...filter, trangThai: 'da_xong' });
 
-    // Count cases (HoSoKham) with trangThai = 'RESULT_READY'
+    // Đếm số hồ sơ khám có trangThai = 'RESULT_READY'
     const readyFilter = {};
     if (date) {
       const start = new Date(`${date}T00:00:00`);

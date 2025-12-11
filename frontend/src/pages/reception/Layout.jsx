@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ChatBubble from '../../components/ChatBubble';
 
 // Layout Lễ tân đồng bộ thiết kế: brand, alert chế độ, nav bo góc, active rõ ràng.
 export default function ReceptionLayout() {
@@ -30,6 +31,7 @@ export default function ReceptionLayout() {
               <li className="nav-item mb-2"><NavLink to="/reception/stats" className={({isActive})=> linkClass(isActive)}><i className="bi bi-graph-up-arrow me-2"></i>Thống kê doanh thu</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/lookup" className={({isActive})=> linkClass(isActive)}><i className="bi bi-search me-2"></i>Tra cứu bệnh nhân</NavLink></li>
               <li className="nav-item mb-2"><NavLink to="/reception/my-schedule" className={({isActive})=> linkClass(isActive)}><i className="bi bi-calendar-week me-2"></i>Lịch của tôi</NavLink></li>
+              <li className="nav-item mb-2"><NavLink to="/reception/chats" className={({isActive})=> linkClass(isActive)}><i className="bi bi-chat-dots me-2"></i>Tin nhắn bệnh nhân</NavLink></li>
             </ul>
             <div className="mt-auto w-100">
               <div className="small text-muted mb-2 d-flex align-items-center gap-2">
@@ -44,6 +46,7 @@ export default function ReceptionLayout() {
         </aside>
         <main className="col d-flex flex-column p-3 overflow-auto">
           <Outlet />
+          <ChatBubble />
         </main>
       </div>
     </div>

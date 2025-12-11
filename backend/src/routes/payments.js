@@ -11,7 +11,8 @@ const CanLamSang = require('../models/CanLamSang');
 const DonThuoc = require('../models/DonThuoc');
 
 // Lấy thông tin thanh toán theo id (chỉ người có quyền)
-// Lưu ý: hạn chế :id theo ObjectId 24-hex để tránh bắt nhầm đường dẫn literal như 'services'
+// Lưu ý: Hạn chế tham số :id theo ObjectId 24-hex để tránh bắt nhầm
+// các đường dẫn literal như 'services'
 router.get('/:id([0-9a-fA-F]{24})', auth, authorize('reception','pharmacy','admin'), async (req, res, next) => {
   try {
     const p = await ThanhToan.findById(req.params.id);
@@ -32,7 +33,7 @@ router.get('/services', auth, authorize('reception','admin'), async (req, res, n
   } catch (err) { next(err); }
 });
 
-// Tạo payment request qua MoMo (chỉ role: reception, pharmacy, admin)
+// Tạo yêu cầu thanh toán qua MoMo (chỉ vai trò: reception, pharmacy, admin)
 router.post('/momo/create', auth, authorize('reception','pharmacy','admin'), async (req, res, next) => {
   try {
     const { hoSoKhamId, amount, returnUrl, notifyUrl, orderInfo, orderRefs, targetType } = req.body;
@@ -75,7 +76,7 @@ router.post('/momo/create', auth, authorize('reception','pharmacy','admin'), asy
       return res.json({ paymentId: payment._id, momo: resp });
     }catch(err){
       console.error('Error creating MoMo payment', { err: err?.message || err, stack: err?.stack });
-      // Try to extract axios response data if available
+      // Cố gắng lấy dữ liệu phản hồi từ axios nếu có
       const detail = err?.response?.data || err?.message || 'Unknown error';
       return res.status(500).json({ error: 'Tạo MoMo payment thất bại', detail });
     }
@@ -88,9 +89,9 @@ router.post('/momo/create', auth, authorize('reception','pharmacy','admin'), asy
 router.post('/momo/notify', async (req, res, next) => {
   try {
     const payload = req.body || {};
-    // verify signature (best-effort)
+    // Xác minh chữ ký (mức nỗ lực tốt nhất)
     const valid = momoService.verifyNotifySignature(payload);
-    // Nếu không verify được, vẫn tiếp tục xử lý có kiểm tra resultCode
+    // Nếu không xác minh được, vẫn tiếp tục xử lý có kiểm tra resultCode
 
     const { orderId, resultCode, transId } = payload;
     if (!orderId) return res.status(400).json({ error: 'orderId missing' });
@@ -109,7 +110,7 @@ router.post('/momo/notify', async (req, res, next) => {
       payment.ngayThanhToan = new Date();
       await payment.save();
 
-      // Khi payment thành công, cập nhật các entity liên quan theo targetType + orderRefs
+      // Khi thanh toán thành công, cập nhật các thực thể liên quan theo targetType + orderRefs
       try{
         if(payment.targetType === 'canlamsang' && Array.isArray(payment.orderRefs) && payment.orderRefs.length){
           const CanLamSang = require('../models/CanLamSang');
@@ -132,7 +133,7 @@ router.post('/momo/notify', async (req, res, next) => {
   }
 });
 
-// Xử lý trả về nhanh từ trang redirect (client POST params vào đây)
+// Xử lý trả về nhanh từ trang redirect (client POST params gửi vào đây)
 // POST /api/payments/momo/return
 router.post('/momo/return', express.json(), async (req, res) => {
   try{
@@ -143,7 +144,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
       transId, resultCode, message, payType, responseTime, extraData, signature
     } = req.body || {};
 
-    // Verify signature
+    // Xác minh chữ ký
     const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
     const check = require('crypto').createHmac('sha256', secretKey).update(rawSignature).digest('hex');
     if(check !== signature){
@@ -161,7 +162,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
       payment.momoTransactionId = transId || payment.momoTransactionId;
       payment.rawResponse = req.body;
       await payment.save();
-      // update related entities
+      // Cập nhật các thực thể liên quan
       try{
         if(payment.targetType === 'canlamsang' && Array.isArray(payment.orderRefs) && payment.orderRefs.length){
           await CanLamSang.updateMany({ _id: { $in: payment.orderRefs } }, { $set: { daThanhToan: true } });
@@ -213,7 +214,7 @@ router.get('/momo/return-get', async (req, res) => {
       return res.redirect(url.toString());
     }
 
-    // success
+    // Thành công
     url.searchParams.set('status','success');
     if(orderId) url.searchParams.set('paymentId', orderId);
     return res.redirect(url.toString());
@@ -251,7 +252,7 @@ router.get('/momo/return', async (req, res) => {
       return res.redirect(url.toString());
     }
 
-    // If payment exists, mark it paid and update related entities
+    // Nếu tồn tại payment, đánh dấu đã thanh toán và cập nhật thực thể liên quan
     if(orderId){
       try{
         const payment = await ThanhToan.findById(orderId);
@@ -403,7 +404,7 @@ router.get('/canlamsang', auth, authorize('reception','admin'), async (req, res,
 router.get('/unpaid-cases', auth, authorize('reception','admin'), async (req, res, next) => {
   try{
     const q = (req.query.q || '').trim();
-    // aggregate unpaid canlamsang grouped by hoSoKhamId
+    // Tổng hợp các chỉ định chưa thanh toán, gom nhóm theo hoSoKhamId
     const pipeline = [
       { $match: { daThanhToan: false } },
       { $group: { _id: '$hoSoKhamId', count: { $sum: 1 }, orderIds: { $push: '$_id' } } },

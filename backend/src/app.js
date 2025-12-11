@@ -29,6 +29,7 @@ const receptionRouter = require('./routes/reception');
 const newsRouter = require('./routes/news');
 const reviewsRouter = require('./routes/reviews');
 const adminNewsRouter = require('./routes/adminNews');
+const chatRouter = require('./routes/chat');
 
 const app = express();
 
@@ -99,6 +100,8 @@ app.use('/api/reception', auth, authorize('reception','admin'), receptionRouter)
 app.use('/api/news', newsRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/admin/news', auth, authorize('admin'), adminNewsRouter);
+// Chat history API
+app.use('/api/chat', chatRouter);
 
 // Protected sample route
 app.get('/api/profile', auth, (req, res) => {

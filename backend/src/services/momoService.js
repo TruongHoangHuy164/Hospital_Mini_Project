@@ -12,22 +12,23 @@ function signRaw(raw, secret) {
   return crypto.createHmac('sha256', secret).update(raw).digest('hex');
 }
 
+// Tạo yêu cầu thanh toán MoMo
 async function createPayment({ amount, orderId, orderInfo = 'Thanh toan', returnUrl, notifyUrl, requestId, extraData = '' }) {
   const partnerCode = MOMO.partnerCode;
   const accessKey = MOMO.accessKey;
   const secretKey = MOMO.secretKey;
   const requestType = 'captureWallet';
-  // Validate config
+  // Kiểm tra cấu hình bắt buộc
   if(!partnerCode || !accessKey || !secretKey) {
     throw new Error('MoMo config missing (MOMO_PARTNER_CODE / MOMO_ACCESS_KEY / MOMO_SECRET_KEY).');
   }
 
-  // Normalize amount
+  // Chuẩn hóa số tiền
   const amountNum = Number(amount);
   if (Number.isNaN(amountNum) || amountNum <= 0) throw new Error('Invalid amount for MoMo createPayment');
   const amountStr = String(amountNum);
 
-  // Ensure extraData is base64 encoded (MoMo expects base64 in many examples)
+  // Đảm bảo extraData ở dạng base64 (MoMo thường kỳ vọng base64)
   let extraDataB64 = extraData || '';
   if (extraDataB64 && !/^[A-Za-z0-9+/=]+$/.test(extraDataB64)) {
     try{ extraDataB64 = Buffer.from(String(extraDataB64)).toString('base64'); }catch(e){ extraDataB64 = '' }
@@ -56,7 +57,7 @@ async function createPayment({ amount, orderId, orderInfo = 'Thanh toan', return
     const resp = await axios.post(MOMO.endpoint, body, { timeout: 10000 });
     return resp.data;
   }catch(err){
-    // Log detailed response for debugging
+    // Ghi log chi tiết để debug khi lỗi
     console.error('MoMo createPayment error:', {
       endpoint: MOMO.endpoint,
       status: err?.response?.status,
@@ -69,15 +70,15 @@ async function createPayment({ amount, orderId, orderInfo = 'Thanh toan', return
   }
 }
 
-// Verify incoming notify signature (basic): reconstruct raw string and compare
+// Xác minh chữ ký notify (cơ bản): dựng chuỗi thô và so sánh
 function verifyNotifySignature(payload) {
-  // payload expected to include signature and the fields used to sign
+  // payload cần bao gồm chữ ký và các trường đã dùng để ký
   const secret = MOMO.secretKey;
   const {
     partnerCode, accessKey, requestId, amount, orderId, orderInfo, orderType, transId, message, localMessage, responseTime, resultCode, payType,
   } = payload;
 
-  // Build raw string similar to MoMo docs (notify may include different fields; this is a best-effort)
+  // Dựng chuỗi thô tương tự tài liệu MoMo (notify có thể khác trường; nỗ lực tốt nhất)
   const raw = `partnerCode=${partnerCode}&accessKey=${accessKey}&requestId=${requestId}&amount=${amount}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType || ''}&transId=${transId || ''}&message=${message || ''}&responseTime=${responseTime || ''}&resultCode=${resultCode || ''}`;
   const expected = signRaw(raw, secret);
   return expected === payload.signature;

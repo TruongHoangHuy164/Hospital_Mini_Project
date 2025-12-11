@@ -2,7 +2,7 @@ const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const mongoose = require('mongoose');
 
-// Require models to register them with Mongoose
+// Nạp các model để Mongoose đăng ký trước khi thao tác
 require('../models/BenhNhan');
 require('../models/SoThuTu');
 require('../models/PhongKham');
@@ -20,7 +20,7 @@ async function main() {
   await mongoose.connect(uri);
   const db = mongoose.connection.db;
 
-  // Explicitly create collections so they appear in Compass
+  // Tạo collection rõ ràng để hiển thị trong MongoDB Compass
   const collections = [
     'benhnhans',
     'sothutus',
@@ -40,14 +40,14 @@ async function main() {
     const exists = (await db.listCollections({ name }).toArray()).length > 0;
     if (!exists) {
       await db.createCollection(name);
-      console.log('Created collection:', name);
+      console.log('Đã tạo collection:', name);
     } else {
-      console.log('Collection exists:', name);
+      console.log('Collection đã tồn tại:', name);
     }
   }
 
   await mongoose.disconnect();
-  console.log('Done.');
+  console.log('Hoàn tất.');
 }
 
 main().catch((e) => {
