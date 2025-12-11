@@ -1,5 +1,5 @@
-// Seed some demo work schedules for a given month
-// Usage: node src/scripts/seedWorkSchedules.js 2025-10
+// Seed dữ liệu lịch làm việc demo cho một tháng
+// Cách chạy: node src/scripts/seedWorkSchedules.js 2025-10
 require('dotenv').config();
 const mongoose = require('mongoose');
 const User = require('../models/User');
@@ -15,23 +15,23 @@ async function main(){
 
   await mongoose.connect(process.env.MONGODB_URI);
   const users = await User.find({ role: { $in: ['doctor','reception','lab','cashier','nurse'] } }).select('_id role name').limit(50);
-  if(!users.length){ console.log('Không có user role phù hợp'); process.exit(0); }
+  if(!users.length){ console.log('Không có người dùng có vai trò phù hợp'); process.exit(0); }
   const ops = [];
   for(const u of users){
     for(let d = new Date(start); d < end; d.setDate(d.getDate()+1)){
-      if([0,6].includes(d.getDay())) continue; // bỏ cuối tuần ví dụ
+      if([0,6].includes(d.getDay())) continue; // ví dụ: bỏ Chủ nhật & Thứ bảy
       const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-      // tạo 1 hoặc 2 ca ngẫu nhiên
+      // Tạo 2 ca (sáng/chiều) chuẩn
       const shifts = ['sang','chieu'];
       for(const shift of shifts){
-        const shiftType = 'lam_viec';
+        const shiftType = 'lam_viec'; // loại ca: làm việc
         ops.push({ updateOne: { filter: { userId: u._id, day, shift }, update: { $set: { userId: u._id, role: u.role, day, shift, shiftType } }, upsert: true } });
       }
     }
   }
   if(!ops.length){ console.log('Không có dữ liệu để ghi'); return; }
   const res = await WorkSchedule.bulkWrite(ops, { ordered: false });
-  console.log('Done. Upserted:', res.upsertedCount, 'Modified:', res.modifiedCount);
+  console.log('Hoàn tất. Upserted:', res.upsertedCount, 'Modified:', res.modifiedCount);
   await mongoose.disconnect();
 }
 

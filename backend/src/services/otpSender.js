@@ -2,8 +2,9 @@ const nodemailer = require('nodemailer');
 
 let transporterCache = null;
 
+// Xây dựng transporter SMTP từ biến môi trường
 function buildTransport() {
-  // Prefer SMTP_* env names; fallback to MAIL_* for backward compatibility
+  // Ưu tiên các biến dạng SMTP_*; fallback sang MAIL_* để tương thích
   const env = process.env;
   const host = env.SMTP_HOST || env.MAIL_HOST;
   const port = Number(env.SMTP_PORT || env.MAIL_PORT || 587);
@@ -24,6 +25,7 @@ function buildTransport() {
   });
 }
 
+// Lấy transporter dùng cache để tránh tạo lại
 function getTransport() {
   if (transporterCache) return transporterCache;
   transporterCache = buildTransport();
@@ -37,6 +39,7 @@ function getTransport() {
   return transporterCache;
 }
 
+// Gửi OTP qua email
 async function sendEmailOTP(email, otp) {
   if (!email) return;
   const transporter = getTransport();
@@ -56,7 +59,7 @@ async function sendEmailOTP(email, otp) {
   }
 }
 
-// Placeholder: integrate real SMS provider (Twilio, Viettel, etc.) later
+// Placeholder: tích hợp nhà cung cấp SMS (Twilio, Viettel, ...) sau
 async function sendSmsOTP(phone, otp) {
   if (!phone) return;
   const text = `Ma OTP dat lai mat khau: ${otp} (hieu luc 5 phut)`;

@@ -8,7 +8,7 @@ const CapThuoc = require('../models/CapThuoc');
 const ThuocKho = require('../models/ThuocKho');
 const LoaiThuoc = require('../models/LoaiThuoc');
 
-// Tất cả endpoint yêu cầu đăng nhập và role 'pharmacy' (hoặc admin)
+// Tất cả endpoint yêu cầu đăng nhập và role 'pharmacy' (hoặc 'admin')
 router.use(auth);
 router.use(authorize('pharmacy', 'admin'));
 
@@ -19,7 +19,7 @@ router.get('/orders', async (req, res) => {
     const { status, day } = req.query;
     const filter = {};
     
-    // Map workflow statuses to DonThuoc model statuses
+    // Ánh xạ trạng thái luồng công việc sang trạng thái trong model DonThuoc
     const statusMap = {
       'WAITING_FOR_MEDICINE': 'issued',
       'PAID': 'pending_pharmacy',
@@ -31,7 +31,7 @@ router.get('/orders', async (req, res) => {
       filter.status = statusMap[status];
     }
     
-    // Date filtering for a specific day
+    // Lọc theo ngày cụ thể
     if (day) {
       const start = new Date(`${day}T00:00:00`);
       const end = new Date(start);
@@ -91,10 +91,10 @@ router.get('/stats', async (req, res) => {
     }
     
     const stats = {
-      waiting: 0,    // status: 'issued'
-      paid: 0,       // status: 'pending_pharmacy'
-      preparing: 0,  // status: 'dispensing'
-      completed: 0   // status: 'dispensed'
+      waiting: 0,    // trạng thái: 'issued' (chờ thanh toán)
+      paid: 0,       // trạng thái: 'pending_pharmacy' (đã thanh toán)
+      preparing: 0,  // trạng thái: 'dispensing' (đang chuẩn bị)
+      completed: 0   // trạng thái: 'dispensed' (đã phát thuốc)
     };
     
     stats.waiting = await DonThuoc.countDocuments({ ...filter, status: 'issued' });
@@ -249,7 +249,7 @@ router.post('/inventory/import', async (req, res) => {
       return res.status(400).json({ message: 'Payload phải là mảng JSON' });
     }
 
-    const { categoryId } = req.query; // optional assign category id
+    const { categoryId } = req.query; // tùy chọn: gán danh mục cho tất cả mục
 
     const results = {
       total: data.length,
@@ -268,7 +268,7 @@ router.post('/inventory/import', async (req, res) => {
             return;
           }
 
-          // Assign selected category for all items if provided
+          // Gán danh mục đã chọn cho tất cả item nếu có
           if (categoryId) item.loaiThuoc = categoryId;
 
           const key = item.link ? { link: item.link } : { ten_san_pham: item.ten_san_pham };
@@ -300,7 +300,7 @@ router.post('/inventory/import', async (req, res) => {
 router.get('/categories', async (req, res) => {
   try {
     const categories = await LoaiThuoc.find({}).sort({ ten: 1 });
-    // counts
+    // Đếm số lượng theo danh mục
     const counts = await ThuocKho.aggregate([
       { $group: { _id: '$loaiThuoc', count: { $sum: 1 } } },
     ]);
@@ -338,7 +338,7 @@ router.put('/categories/:id', async (req, res) => {
 
 router.delete('/categories/:id', async (req, res) => {
   try {
-    // Optional: prevent delete if there are medicines linked
+    // Tùy chọn: ngăn xóa nếu còn thuốc liên kết với danh mục
     const cnt = await ThuocKho.countDocuments({ loaiThuoc: req.params.id });
     if (cnt > 0) return res.status(400).json({ message: 'Không thể xóa: còn thuốc thuộc loại này' });
     await LoaiThuoc.findByIdAndDelete(req.params.id);

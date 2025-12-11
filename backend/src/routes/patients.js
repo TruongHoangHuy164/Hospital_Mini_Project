@@ -7,10 +7,11 @@ const User = require('../models/User');
 const router = express.Router();
 
 // Kiểm tra quyền đơn giản: chỉ cho admin hoặc lễ tân (reception)
+// Yêu cầu quyền: chỉ cho phép 'admin' hoặc 'reception'
 function requireReceptionOrAdmin(req, res, next){
-  if(!req.user) return res.status(401).json({ message: 'Unauthorized' });
+  if(!req.user) return res.status(401).json({ message: 'Chưa xác thực' });
   if(req.user.role === 'admin' || req.user.role === 'reception') return next();
-  return res.status(403).json({ message: 'Forbidden' });
+  return res.status(403).json({ message: 'Không có quyền truy cập' });
 }
 
 // GET /api/patients/search?q=...&limit=20
@@ -87,7 +88,7 @@ router.get('/search', requireReceptionOrAdmin, async (req, res, next) => {
 
     // Gộp kết quả: ưu tiên BenhNhan, sau đó là Profile, loại trùng theo tên+SĐT
     const combined = [...results];
-    // Simple dedupe: avoid adding a profile if there's already a benhNhan with same phone or name
+    // Khử trùng lặp đơn giản: không thêm profile nếu đã có BenhNhan trùng SĐT hoặc tên
     const seen = new Set(results.map(r => `${r.soDienThoai || ''}::${(r.hoTen||'').toLowerCase()}`));
     for(const p of profileResults){
       const key = `${p.soDienThoai || ''}::${(p.hoTen||'').toLowerCase()}`;
@@ -108,12 +109,12 @@ router.get('/user-by-contact', requireReceptionOrAdmin, async (req, res, next) =
     const contactTrim = String(contact).trim();
     let user = null;
     
-    // Check if it's an email or phone
+    // Kiểm tra liên lạc là email hay số điện thoại
     if (contactTrim.includes('@')) {
-      // Search by email
+      // Tìm theo email
       user = await User.findOne({ email: contactTrim.toLowerCase() }).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
     } else {
-      // Search by phone
+      // Tìm theo số điện thoại
       const phoneNorm = contactTrim.replace(/[^0-9+]/g, '');
       if (!phoneNorm) return res.status(400).json({ message: 'Số điện thoại hoặc email không hợp lệ' });
       user = await User.findOne({ phone: phoneNorm }).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
@@ -156,7 +157,7 @@ router.post('/provision-user', requireReceptionOrAdmin, async (req, res, next) =
     }
     
     if (!user) {
-      // Create user with default password
+      // Tạo tài khoản người dùng với mật khẩu mặc định
       const displayName = (name && String(name).trim()) || `Khách ${phoneNorm || emailNorm}`;
       const userData = { name: displayName, password: '123456', role: 'user' };
       if (emailNorm) userData.email = emailNorm;
@@ -165,7 +166,7 @@ router.post('/provision-user', requireReceptionOrAdmin, async (req, res, next) =
       user = await User.create(userData);
     }
 
-    // Ensure a basic Patient (self) exists
+    // Đảm bảo tạo BenhNhan (bản thân) cơ bản nếu chưa có
     let selfPatient = await Patient.findOne({ userId: user._id });
     if (!selfPatient) {
       selfPatient = await Patient.create({ 
@@ -179,7 +180,7 @@ router.post('/provision-user', requireReceptionOrAdmin, async (req, res, next) =
     const userSafe = await User.findById(user._id).select('-password -resetPasswordToken -resetPasswordExpires -refreshTokenIds');
     return res.status(201).json({ message: 'Đã cấp tài khoản', user: userSafe, selfPatient });
   } catch (err) {
-    // Handle duplicate phone/email gracefully
+    // Xử lý trường hợp số điện thoại/email trùng lặp một cách nhẹ nhàng
     if (err && err.code === 11000) {
       const field = err.message.includes('email') ? 'Email' : 'Số điện thoại';
       return res.status(409).json({ message: `${field} đã tồn tại` });
@@ -247,7 +248,7 @@ router.get('/:id', requireReceptionOrAdmin, async (req, res, next) => {
     const doc = await Patient.findById(req.params.id).select('-__v').lean();
     if(!doc) return res.status(404).json({ message: 'Không tìm thấy bệnh nhân' });
 
-    // fetch relatives (PatientProfile) when possible
+    // Lấy danh sách người thân (PatientProfile) nếu có
     if (doc.userId) {
       const relatives = await PatientProfile.find({ id_nguoiTao: doc.userId })
         .select('maHoSo hoTen ngaySinh soDienThoai quanHe diaChi _id id_nguoiTao')

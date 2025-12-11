@@ -1,10 +1,12 @@
 const fetch = global.fetch || require('node-fetch');
 
+// Cấu hình OpenRouter
 const BASE_URL = process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1';
 const API_KEY = process.env.OPENROUTER_API_KEY;
 const DEFAULT_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-4o-mini';
 const APP_TITLE = process.env.OPENROUTER_TITLE || 'Hospital Mini Project';
 
+// Đảm bảo có API key cấu hình
 function ensureApiKey(){
   if(!API_KEY){
     const err = new Error('OPENROUTER_API_KEY is not set');
@@ -13,6 +15,7 @@ function ensureApiKey(){
   }
 }
 
+// Gọi API chat completions
 async function chatComplete({ messages, model, temperature = 0.2, max_tokens } = {}){
   ensureApiKey();
   const url = `${BASE_URL}/chat/completions`;

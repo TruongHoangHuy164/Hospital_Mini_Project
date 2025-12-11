@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const ChatMessage = require('../models/ChatMessage');
 const BenhNhan = require('../models/BenhNhan');
 
+// Lấy token từ nhiều nguồn trên handshake (Header/Auth/Query)
 function getToken(handshake){
   const hAuth = handshake.headers?.authorization || '';
   if(hAuth.startsWith('Bearer ')) return hAuth.slice(7);
@@ -13,12 +14,13 @@ function getToken(handshake){
   return null;
 }
 
+// Xác thực quyền tham gia phòng
+// Định dạng phòng: room:benhNhan:<benhNhanId>
 async function validateJoin({ user, role, roomId }){
-  // room format: room:benhNhan:<benhNhanId>
   if(!roomId || !roomId.startsWith('room:')) return false;
   if(role === 'reception' || role === 'admin') return true;
   if(role === 'user'){
-    // make sure this user owns the benhNhanId in room
+    // Đảm bảo user sở hữu benhNhanId của phòng
     const parts = roomId.split(':');
     const type = parts[1]; const id = parts[2];
     if(type !== 'benhNhan' || !id) return false;
@@ -27,7 +29,7 @@ async function validateJoin({ user, role, roomId }){
       return !!bn && String(bn.userId) === String(user.id);
     }catch{ return false; }
   }
-  // other roles default deny
+  // Các vai trò khác mặc định bị từ chối
   return false;
 }
 
@@ -39,12 +41,13 @@ function setupChatSocket(server){
     }
   });
 
+  // Middleware xác thực JWT cho kết nối Socket.IO
   io.use((socket, next) => {
     try{
       const token = getToken(socket.handshake);
       if(!token) return next(new Error('auth missing'));
       const payload = jwt.verify(token, process.env.JWT_SECRET);
-      // payload: { id, role, name }
+      // payload gồm các trường: { id, role, name }
       socket.user = payload;
       next();
     }catch(err){
@@ -61,11 +64,11 @@ function setupChatSocket(server){
       const ok = await validateJoin({ user, role, roomId });
       if(!ok){ socket.emit('error', { message: 'join denied' }); return; }
       socket.join(roomId);
-      // presence
+      // Hiện diện: theo dõi số người trong phòng
       const set = roomPresence.get(roomId) || new Set();
       set.add(String(user.id)); roomPresence.set(roomId, set);
       io.to(roomId).emit('presence', { count: set.size });
-      // send last 20 messages
+      // Gửi 20 tin nhắn gần nhất
       try{
         const raw = await ChatMessage.find({ roomId }).sort({ createdAt: -1 }).limit(20).lean();
         const enriched = [];
@@ -73,7 +76,7 @@ function setupChatSocket(server){
           let senderName = '';
           try{
             if(m.senderRole === 'user'){
-              // Prefer patient name
+              // Ưu tiên dùng tên bệnh nhân
               if(roomId.startsWith('room:benhNhan:')){
                 const id = roomId.split(':')[2];
                 const bn = await BenhNhan.findById(id).select('hoTen').lean();
@@ -98,9 +101,9 @@ function setupChatSocket(server){
 
     socket.on('message', async ({ roomId, text }) => {
       if(!text || !roomId) return;
-      // naive: assume user already joined
+      // Đơn giản: giả định user đã tham gia phòng
       const msg = await ChatMessage.create({ roomId, senderId: user.id, senderRole: role, text, createdAt: new Date() });
-      // enrich name for outgoing message
+      // Bổ sung tên người gửi cho tin nhắn vừa tạo
       let senderName = '';
       try{
         if(role === 'user'){

@@ -1,14 +1,14 @@
-// Auto scheduling service
-// Generates fair next-month schedules based on rules:
-// - Max 6 consecutive working days
-// - Min 4 days off per month
-// - Spread night ("toi") shifts evenly (used as night or evening shift placeholder)
-// - If a user works a night shift (shiftType 'truc' on 'toi'), next day morning shift is off (enforced by skipping assignment)
-// - Target working days range per role:
-//   doctor: 22-25 days (2 shifts/day possible)
-//   nurse: ~22 shifts (mix of day/night) using sequential pattern 4 day + 1 night + 1 off
-//   reception|cashier|lab: 24-26 day shifts, single shift (sang or chieu) with rotation
-// Implementation chooses a pattern heuristic rather than exact optimization.
+// Dịch vụ tự động xếp lịch làm việc
+// Tạo lịch công bằng cho tháng kế tiếp dựa trên các quy tắc:
+// - Tối đa 6 ngày làm liên tiếp
+// - Tối thiểu 4 ngày nghỉ mỗi tháng
+// - Phân bổ ca tối ("toi") đồng đều (dùng như ca trực/ca tối)
+// - Nếu nhân sự trực ca tối (shiftType 'truc' ở 'toi'), sáng hôm sau nghỉ (bỏ gán ca sáng)
+// - Mục tiêu số ngày/ca làm việc theo vai trò:
+//   doctor: 22-25 ngày (có thể 2 ca/ngày)
+//   nurse: ~22 ca (trộn ca ngày/ca tối) theo chu kỳ 4 ngày + 1 tối + 1 nghỉ
+//   reception|cashier|lab: 24-26 ca ngày, mỗi ngày 1 ca (sáng hoặc chiều) luân phiên
+// Cách triển khai dùng heuristic theo mẫu, không tối ưu hoá tuyệt đối.
 
 const WorkSchedule = require('../models/WorkSchedule');
 
@@ -28,7 +28,7 @@ function shuffle(arr){
   return a;
 }
 
-// Core generator per role
+// Bộ sinh lịch theo từng vai trò
 function generateForRole({ role, users, yearMonth, options = {} }){
   const days = dateList(yearMonth);
   const entries = [];
@@ -37,7 +37,7 @@ function generateForRole({ role, users, yearMonth, options = {} }){
   for(const s of Object.values(stats)){ s.workedDays = new Set(); }
 
   if(role === 'nurse'){
-    // Pattern: 4 day (sang) + 1 night (toi, truc) + 1 off, repeat
+    // Mẫu: 4 ngày (sáng) + 1 tối (toi, trực) + 1 nghỉ, lặp lại
     const pattern = ['sang','sang','sang','sang','toi','off'];
     let patIndex = 0;
     let userIndex = 0;
@@ -60,17 +60,17 @@ function generateForRole({ role, users, yearMonth, options = {} }){
       }
     }
   } else if(role === 'doctor'){
-    // Assign morning/afternoon pairs spread, allow some full days and some single shifts.
-    // Step 1: Build rotation order
+    // Phân bổ cặp ca sáng/chiều, có ngày làm cả ngày và ngày chỉ một ca.
+    // Bước 1: Tạo thứ tự luân phiên
     const orderedUsers = shuffle(users);
     let idx = 0;
     for(const day of days){
-      const weekday = new Date(day).getDay(); // 0 Sunday
-      // Skip some Sundays for rest
-      const restDay = (weekday === 0); // Sunday off default
+      const weekday = new Date(day).getDay(); // 0: Chủ nhật
+      // Bỏ một số Chủ nhật để nghỉ
+      const restDay = (weekday === 0); // Mặc định nghỉ Chủ nhật
       if(restDay) continue;
-      // Decide if full-day or single-shift day
-      const fullDay = (weekday === 2 || weekday === 4); // Wed/Fri full-day pattern
+      // Quyết định làm cả ngày hay một ca
+      const fullDay = (weekday === 2 || weekday === 4); // Thứ 4/Thứ 6 làm cả ngày theo mẫu
       if(fullDay){
         const u = orderedUsers[idx % orderedUsers.length]; idx++;
         entries.push({ userId: u._id, role, day, shift: 'sang', shiftType: 'lam_viec' });
@@ -78,7 +78,7 @@ function generateForRole({ role, users, yearMonth, options = {} }){
         const st = stats[u._id.toString()];
         st.shifts += 2; st.workedDays.add(day);
       } else {
-        // Two different doctors morning/afternoon
+        // Hai bác sĩ khác nhau cho ca sáng/chiều
         const u1 = orderedUsers[idx % orderedUsers.length]; idx++;
         const u2 = orderedUsers[idx % orderedUsers.length]; idx++;
         entries.push({ userId: u1._id, role, day, shift: 'sang', shiftType: 'lam_viec' });
@@ -86,7 +86,7 @@ function generateForRole({ role, users, yearMonth, options = {} }){
         stats[u1._id.toString()].shifts += 1; stats[u1._id.toString()].workedDays.add(day);
         stats[u2._id.toString()].shifts += 1; stats[u2._id.toString()].workedDays.add(day);
       }
-      // Occasionally add an evening (toi) on Saturdays rotating for on-call
+      // Thỉnh thoảng thêm ca tối (toi) vào Thứ 7 để trực luân phiên
       if(weekday === 6){
         const u = orderedUsers[idx % orderedUsers.length]; idx++;
         entries.push({ userId: u._id, role, day, shift: 'toi', shiftType: 'truc' });
@@ -94,12 +94,12 @@ function generateForRole({ role, users, yearMonth, options = {} }){
       }
     }
   } else {
-    // reception, cashier, lab -> single shift coverage for each open day
+    // reception, cashier, lab -> mỗi ngày một ca để phủ kín ngày mở cửa
     const orderedUsers = shuffle(users);
     let idx = 0;
     for(const day of days){
       const weekday = new Date(day).getDay();
-      // Example: clinic open all days; optionally make Sunday lighter by skipping
+      // Ví dụ: phòng khám mở cả tuần; có thể giảm tải Chủ nhật bằng cách bỏ qua
       const closed = false;
       if(closed) continue;
       const u = orderedUsers[idx % orderedUsers.length]; idx++;
@@ -108,7 +108,7 @@ function generateForRole({ role, users, yearMonth, options = {} }){
     }
   }
 
-  // Compute summary stats
+  // Tính thống kê tổng hợp
   const summaries = Object.values(stats).map(s => ({
     userId: s.userId,
     role,

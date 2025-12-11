@@ -2,12 +2,12 @@ const nodemailer = require('nodemailer');
 
 // Cấu hình email transporter
 const createTransporter = () => {
-  // Sử dụng Gmail SMTP (có thể thay đổi theo provider khác)
+  // Sử dụng Gmail SMTP (có thể thay đổi theo nhà cung cấp khác)
   return nodemailer.createTransport({
     service: 'gmail',
     auth: {
-      user: process.env.EMAIL_USER || 'cybernblack@gmail.com', // Thay đổi trong .env
-      pass: process.env.EMAIL_PASS || 'qyes bqek ferq dsqm' // App password, không phải mật khẩu thường
+      user: process.env.EMAIL_USER || 'cybernblack@gmail.com', // Cập nhật trong .env
+      pass: process.env.EMAIL_PASS || 'qyes bqek ferq dsqm' // App password, không phải mật khẩu thông thường
     }
   });
 };

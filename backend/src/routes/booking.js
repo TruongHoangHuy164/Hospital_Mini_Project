@@ -30,7 +30,7 @@ const router = express.Router();
 // Tính đầu ngày/cuối ngày để lọc theo ngày
 function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); }
-// Chuẩn hoá chuỗi giờ về định dạng HH:MM để so sánh lexicographic an toàn
+// Chuẩn hoá chuỗi giờ về định dạng HH:MM để so sánh theo thứ tự chuỗi an toàn
 function normTimeStr(t){
   if(!t || typeof t !== 'string') return '';
   const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
@@ -79,7 +79,7 @@ router.get('/patients', auth, async (req, res, next) => {
 });
 
 // GET /api/booking/my-appointments?page=1&limit=10
-// Mô tả: Trả về danh sách lịch khám của user hiện tại (theo LichKham.nguoiDatId)
+// Mô tả: Trả về danh sách lịch khám của người dùng hiện tại (theo LichKham.nguoiDatId)
 router.get('/my-appointments', auth, async (req, res, next) => {
   try{
     const page = Math.max(parseInt(req.query.page||'1',10),1);
@@ -89,17 +89,17 @@ router.get('/my-appointments', auth, async (req, res, next) => {
     const filter = { nguoiDatId: req.user.id };
 
     const [items, total] = await Promise.all([
-      LichKham.find(filter)
+    LichKham.find(filter)
         .sort({ ngayKham: -1, createdAt: -1 })
         .skip(skip).limit(limit)
         .populate('bacSiId','hoTen chuyenKhoa')
         .populate('chuyenKhoaId','ten')
-        .populate('benhNhanId', 'hoTen') // Populate for self-booking
-        .populate('hoSoBenhNhanId', 'hoTen'), // Populate for relative-booking
+    .populate('benhNhanId', 'hoTen') // Gắn thông tin bệnh nhân khi đặt cho bản thân
+    .populate('hoSoBenhNhanId', 'hoTen'), // Gắn thông tin hồ sơ người thân khi đặt thay
       LichKham.countDocuments(filter)
     ]);
 
-    // attach queue numbers
+    // Gắn số thứ tự cho từng lịch khám
     const stts = await SoThuTu.find({ lichKhamId: { $in: items.map(i=>i._id) } }).select('lichKhamId soThuTu trangThai').lean();
     const sttMap = stts.reduce((m,s)=>{ m[String(s.lichKhamId)] = s; return m; },{});
 
@@ -110,7 +110,7 @@ router.get('/my-appointments', auth, async (req, res, next) => {
       trangThai: ap.trangThai,
       benhNhanId: ap.benhNhanId?._id || ap.benhNhanId || null,
       hoSoBenhNhanId: ap.hoSoBenhNhanId?._id || ap.hoSoBenhNhanId || null,
-      // Determine patient name from either populated field
+      // Xác định tên bệnh nhân từ trường đã populate (bản thân hoặc người thân)
       benhNhan: {
         hoTen: ap.hoSoBenhNhanId ? ap.hoSoBenhNhanId.hoTen : (ap.benhNhanId ? ap.benhNhanId.hoTen : 'N/A')
       },
@@ -128,13 +128,13 @@ router.get('/my-appointments', auth, async (req, res, next) => {
 
 
 // GET /api/booking/my-results?page=1&limit=10
-// Mô tả: Trả kết quả cận lâm sàng của các hồ sơ thuộc bệnh nhân của user hiện tại
+// Mô tả: Trả kết quả cận lâm sàng của các hồ sơ thuộc bệnh nhân của người dùng hiện tại
 router.get('/my-results', auth, async (req, res, next) => {
   try{
     const page = Math.max(parseInt(req.query.page||'1',10),1);
     const limit = Math.min(Math.max(parseInt(req.query.limit||'10',10),1),50);
     const skip = (page-1)*limit;
-    // patients of current user
+    // Bệnh nhân thuộc người dùng hiện tại
     const myPatients = await BenhNhan.find({ userId: req.user.id }).select('_id').lean();
     const pids = myPatients.map(p=>p._id);
     if(pids.length===0) return res.json({ items: [], total: 0, page, limit, totalPages: 0 });
@@ -268,16 +268,16 @@ router.get('/availability', async (req, res, next) => {
     if(!chuyenKhoaId || !date) return res.status(400).json({ message: 'Thiếu chuyenKhoaId hoặc date' });
     const d = new Date(date);
     if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
-    // Load specialty
+    // Tải chuyên khoa
     const spec = await ChuyenKhoa.findById(chuyenKhoaId);
     if(!spec) return res.status(404).json({ message: 'Chuyên khoa không tồn tại' });
-    // Doctors by specialty name
+    // Lấy danh sách bác sĩ theo tên chuyên khoa
     const doctors = await BacSi.find({ chuyenKhoa: spec.ten }).select('hoTen chuyenKhoa phongKhamId userId');
     const doctorIds = doctors.map(x=>x._id);
     const doctorUserIds = doctors.map(x=>x.userId).filter(Boolean);
     const userToDoctor = doctors.reduce((m, d)=>{ if(d.userId) m[String(d.userId)] = d._id; return m; }, {});
 
-    // Determine shift hours for the month of the given date
+    // Xác định khung giờ ca trong tháng ứng với ngày đã chọn
     const yearMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const cfg = await ScheduleConfig.findOne({ month: yearMonth });
     const defaultShiftHours = {
@@ -287,7 +287,7 @@ router.get('/availability', async (req, res, next) => {
     };
     const shiftHours = cfg?.shiftHours || defaultShiftHours;
 
-    // Find which shifts each doctor works on that day from WorkSchedule
+    // Tìm ca làm việc của mỗi bác sĩ trong ngày từ WorkSchedule
     const dayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
     const schedules = await WorkSchedule.find({ userId: { $in: doctorUserIds }, role: 'doctor', day: dayStr }).select('userId shift');
     const shiftsByDoctor = schedules.reduce((m, s)=>{
@@ -299,7 +299,7 @@ router.get('/availability', async (req, res, next) => {
       return m;
     }, {});
 
-    // Build slots within each shift window at 10-min interval
+    // Tạo các slot trong mỗi khung ca với khoảng 10 phút
     // Ví dụ: 07:30–08:00 -> 07:30, 07:40, 07:50 (3 slot)
     function buildSlots(start, end){
       const [sh, sm] = start.split(':').map(Number);
@@ -321,7 +321,7 @@ router.get('/availability', async (req, res, next) => {
       toi: buildSlots(shiftHours.toi.start, shiftHours.toi.end)
     };
 
-    // Busy map for that date
+    // Bản đồ các khung giờ đã bận trong ngày
     const dayStart = startOfDay(d), dayEnd = endOfDay(d);
     const busy = await LichKham.find({ bacSiId: { $in: doctorIds }, ngayKham: { $gte: dayStart, $lt: dayEnd } })
       .select('bacSiId khungGio');
@@ -332,15 +332,15 @@ router.get('/availability', async (req, res, next) => {
       return m;
     }, {});
 
-    // Compose availability: only show slots for shifts the doctor works
+    // Tổng hợp lịch trống: chỉ hiển thị slot thuộc các ca bác sĩ làm việc
     const result = doctors.map(doc => {
       const did = String(doc._id);
       const workedShifts = shiftsByDoctor[did] || new Set();
-      // If no schedule entry, doctor not working that day -> empty
+      // Nếu không có lịch làm việc, bác sĩ nghỉ ngày đó -> danh sách trống
       if(workedShifts.size === 0){
         return { bacSiId: doc._id, hoTen: doc.hoTen, chuyenKhoa: doc.chuyenKhoa, khungGioTrong: [], shiftHours };
       }
-      // Aggregate slots from worked shifts
+      // Gộp slot từ các ca bác sĩ làm việc
       const allSlots = [];
       for(const sh of ['sang','chieu','toi']){
         if(workedShifts.has(sh)) allSlots.push(...slotsByShift[sh]);
@@ -372,7 +372,7 @@ router.post('/appointments', auth, async (req, res, next) => {
       return res.status(400).json({ message: 'Thiếu dữ liệu bắt buộc (bác sĩ, chuyên khoa, ngày, giờ).' });
     }
     
-    // For walk-in: default date is today if not provided
+    // Với lịch tiếp nhận trực tiếp: mặc định dùng ngày hôm nay nếu không truyền
     const d = isWalkIn && !date ? new Date() : new Date(date);
     if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
     const dayStart = startOfDay(d);
@@ -384,18 +384,18 @@ router.post('/appointments', auth, async (req, res, next) => {
       ngayKham: dayStart,
       khungGio: (function(){
         if(!isWalkIn) return khungGio;
-        // Generate a unique-looking time token for walk-in so it doesn't block slots
+        // Tạo mã thời gian ngẫu nhiên cho lịch tiếp nhận trực tiếp để không chiếm slot chuẩn
         const now = new Date();
         const hh = String(now.getHours()).padStart(2,'0');
         const mm = String(now.getMinutes()).padStart(2,'0');
         const ss = String(now.getSeconds()).padStart(2,'0');
         const rand = String(Math.floor(Math.random()*90)+10);
-        return `${hh}:${mm}:${ss}-${rand}`; // e.g., 09:42:17-53
+        return `${hh}:${mm}:${ss}-${rand}`; // ví dụ: 09:42:17-53
       })(),
       trangThai: 'cho_thanh_toan'
     };
 
-    // For walk-in: ensure current time is still within any configured shift window today
+    // Với lịch tiếp nhận trực tiếp: đảm bảo thời điểm hiện tại nằm trong khung ca cấu hình hôm nay
     if(isWalkIn){
       // Load shift hours for current month
       const yearMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
@@ -417,7 +417,7 @@ router.post('/appointments', auth, async (req, res, next) => {
         return res.status(400).json({ message: `Ngoài giờ làm. Khung ca hôm nay: ` +
           [shiftHours.sang?`Sáng ${shiftHours.sang.start}-${shiftHours.sang.end}`:null, shiftHours.chieu?`Chiều ${shiftHours.chieu.start}-${shiftHours.chieu.end}`:null, shiftHours.toi?`Tối ${shiftHours.toi.start}-${shiftHours.toi.end}`:null].filter(Boolean).join('; ') });
       }
-      // Validate doctor works this shift today
+      // Kiểm tra bác sĩ có làm việc trong ca này hôm nay
       const bs = await BacSi.findById(bacSiId).select('userId hoTen chuyenKhoa');
       if(!bs) return res.status(404).json({ message: 'Bác sĩ không tồn tại' });
       if(!bs.userId){
@@ -492,8 +492,8 @@ router.post('/appointments', auth, async (req, res, next) => {
     // For walk-in: immediately assign next queue number for the day
     if(isWalkIn){
       if(!appointmentData.benhNhanId){
-        // Safety: in theory benhNhanId should be set above for both self and relative
-        console.warn('Walk-in appointment missing benhNhanId, queue not generated');
+        // An toàn: về lý thuyết benhNhanId đã được gán ở trên cho cả tự đặt và đặt cho người thân
+        console.warn('Lịch tiếp nhận trực tiếp thiếu benhNhanId, không thể tạo số thứ tự');
         return res.status(201).json(lk);
       }
       const dayStart2 = startOfDay(lk.ngayKham);
@@ -661,7 +661,7 @@ router.put('/appointments/:id/reassign', auth, async (req,res,next)=>{
 
 
 
-// DELETE /api/booking/appointments/:id - cancel appointment
+// DELETE /api/booking/appointments/:id - hủy lịch khám
 router.delete('/appointments/:id', auth, async (req, res, next) => {
   try{
     const userId = req.user.id;
@@ -701,7 +701,7 @@ router.delete('/appointments/:id', auth, async (req, res, next) => {
   }
 });
 
-// GET /api/booking/queues - list queue numbers for a date (optional doctor)
+// GET /api/booking/queues - liệt kê số thứ tự theo ngày (tùy chọn lọc theo bác sĩ)
 router.get('/queues', async (req, res, next) => {
   try{
     const { date, bacSiId } = req.query;
@@ -765,7 +765,7 @@ module.exports = router;
 
 // ===== Ngày làm việc theo lịch bác sĩ =====
 // GET /api/booking/doctor-available-days?bacSiId=...&month=YYYY-MM
-// Trả về danh sách ngày trong tháng mà bác sĩ có lịch làm việc (sang/chieu/toi)
+// Trả về danh sách ngày trong tháng mà bác sĩ có lịch làm việc (sáng/chiều/tối)
 router.get('/doctor-available-days', async (req, res, next) => {
   try{
     const { bacSiId, month } = req.query;
@@ -802,8 +802,8 @@ router.get('/doctor-available-days', async (req, res, next) => {
   }catch(err){ return next(err); }
 });
 
-// ====== MoMo Payment Integration (Test) ======
-// Create MoMo payment for an appointment
+// ====== Tích hợp thanh toán MoMo (Test) ======
+// Tạo thanh toán MoMo cho một lịch khám
 // POST /api/booking/appointments/:id/momo
 router.post('/appointments/:id/momo', async (req, res, next) => {
   try{
@@ -812,25 +812,25 @@ router.post('/appointments/:id/momo', async (req, res, next) => {
     if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
     if(appt.trangThai === 'da_thanh_toan') return res.status(400).json({ message: 'Đã thanh toán' });
 
-  // Config from env or defaults for local dev
+  // Cấu hình từ biến môi trường hoặc dùng mặc định cho môi trường phát triển local
   const partnerCode = process.env.MOMO_PARTNER_CODE || 'MOMO';
   const accessKey = process.env.MOMO_ACCESS_KEY || 'F8BBA842ECF85';
   const secretKey = process.env.MOMO_SECRET_KEY || 'K951B6PE1waDMi640xX08PD3vg6EkVlz';
   const endpoint = process.env.MOMO_ENDPOINT || 'https://test-payment.momo.vn/v2/gateway/api/create';
-  // Build a backend callback URL by default so that status is updated immediately upon redirect
+  // Xây dựng URL callback về backend để cập nhật trạng thái ngay sau khi redirect
   const baseUrl = process.env.SERVER_BASE_URL || `${req.protocol}://${req.get('host')}`;
   const redirectUrl = process.env.MOMO_RETURN_URL || `${baseUrl}/api/booking/momo/return-get`;
-  // Note: When testing locally, MoMo IPN cannot reach your localhost. Keep this for production/public URLs.
+  // Lưu ý: Khi thử nghiệm local, IPN của MoMo không thể gọi vào localhost. Sử dụng cho URL public/production.
   const ipnUrl = process.env.MOMO_IPN_URL || `${baseUrl}/api/booking/momo/ipn`;
     const requestType = 'captureWallet';
-    const orderType = 'momo_wallet'; // per MoMo v2 API spec
+    const orderType = 'momo_wallet'; // theo đặc tả API v2 của MoMo
 
-    // Amount (VND) - default 150000; allow override via env
+    // Số tiền (VND) - mặc định 150000; có thể thay đổi qua biến môi trường
     const amountNum = Number(process.env.MOMO_AMOUNT || 150000);
     const amountStr = String(amountNum);
     const orderId = `APPT_${id}_${Date.now()}`;
     const requestId = `${Date.now()}`;
-    const orderInfo = 'Thanh toan lich kham';
+    const orderInfo = 'Thanh toán lịch khám';
     const extraDataObj = { lichKhamId: id };
     const extraData = Buffer.from(JSON.stringify(extraDataObj)).toString('base64');
 
@@ -856,7 +856,7 @@ router.post('/appointments/:id/momo', async (req, res, next) => {
     const resp = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     const data = await resp.json().catch(()=>({}));
     if(!resp.ok || !data || data.resultCode !== 0){
-      // Helpful logs for debugging in development
+      // Log hỗ trợ debug trong môi trường phát triển
       console.error('MoMo create payment failed:', {
         status: resp.status,
         resultCode: data?.resultCode,
@@ -866,12 +866,12 @@ router.post('/appointments/:id/momo', async (req, res, next) => {
       });
       return res.status(400).json({ message: data?.message || 'Tạo thanh toán thất bại', detail: data });
     }
-    // Return payUrl to redirect user
+    // Trả về payUrl để client điều hướng (redirect)
     return res.json({ payUrl: data.payUrl, deeplink: data.deeplink, orderId, requestId });
   }catch(err){ return next(err); }
 });
 
-// IPN callback from MoMo
+// IPN callback từ MoMo
 // POST /api/booking/momo/ipn
 router.post('/momo/ipn', express.json(), async (req, res) => {
   try{
@@ -882,7 +882,7 @@ router.post('/momo/ipn', express.json(), async (req, res) => {
       transId, resultCode, message, payType, responseTime, extraData, signature
     } = req.body || {};
 
-    // Verify signature (per MoMo IPN spec)
+    // Xác minh chữ ký (theo đặc tả IPN của MoMo)
     const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
     const check = crypto.createHmac('sha256', secretKey).update(rawSignature).digest('hex');
     if(check !== signature){
@@ -890,14 +890,14 @@ router.post('/momo/ipn', express.json(), async (req, res) => {
     }
 
     if(Number(resultCode) === 0){
-      // Decode extraData to get appointment id
+      // Giải mã extraData để lấy id lịch khám
       let lichKhamId = null;
       try{
         const j = JSON.parse(Buffer.from(extraData||'', 'base64').toString('utf8')||'{}');
         lichKhamId = j.lichKhamId;
       }catch{}
       if(lichKhamId){
-        // Mark paid and generate queue number (idempotent best-effort)
+        // Đánh dấu đã thanh toán và cấp số thứ tự (cố gắng đảm bảo idempotent)
         const appt = await LichKham.findById(lichKhamId);
         if(appt && appt.trangThai !== 'da_thanh_toan'){
           appt.trangThai = 'da_thanh_toan';
@@ -906,7 +906,7 @@ router.post('/momo/ipn', express.json(), async (req, res) => {
           const dayEnd = endOfDay(appt.ngayKham);
           const exists = await SoThuTu.findOne({ lichKhamId: appt._id });
           if(!exists){
-            // STT theo thứ tự đăng ký trong ngày khám: số tiếp theo dựa trên tổng STT đã cấp cho ngày đó
+            // STT theo thứ tự đăng ký trong ngày khám: số tiếp theo dựa trên tổng số thứ tự đã cấp trong ngày đó
             const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd } }).select('_id').lean();
             const idSet = apptIdsInDay.map(a => a._id);
             const existingCount = idSet.length
@@ -925,7 +925,7 @@ router.post('/momo/ipn', express.json(), async (req, res) => {
   }
 });
 
-// Fast return handler from redirect page (client posts query params here)
+// Xử lý trả về nhanh từ trang redirect (client POST các query params vào đây)
 // POST /api/booking/momo/return
 router.post('/momo/return', express.json(), async (req, res) => {
   try{
@@ -936,7 +936,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
       transId, resultCode, message, payType, responseTime, extraData, signature
     } = req.body || {};
 
-    // Verify signature (same as IPN spec)
+    // Xác minh chữ ký (tương tự đặc tả IPN)
     const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
     const check = crypto.createHmac('sha256', secretKey).update(rawSignature).digest('hex');
     if(check !== signature){
@@ -944,7 +944,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
     }
 
     if(Number(resultCode) !== 0){
-      return res.status(400).json({ ok: false, message: 'Payment failed', resultCode });
+      return res.status(400).json({ ok: false, message: 'Thanh toán thất bại', resultCode });
     }
 
     let lichKhamId = null;
@@ -953,7 +953,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
       lichKhamId = j.lichKhamId;
     }catch{}
     if(!lichKhamId){
-      return res.status(400).json({ ok: false, message: 'Missing appointment id' });
+      return res.status(400).json({ ok: false, message: 'Thiếu mã lịch khám' });
     }
 
     const appt = await LichKham.findById(lichKhamId);
@@ -980,7 +980,7 @@ router.post('/momo/return', express.json(), async (req, res) => {
   }
 });
 
-// GET handler for MoMo redirect (use this as MOMO_RETURN_URL)
+// Xử lý GET cho đường dẫn MoMo redirect (dùng làm MOMO_RETURN_URL)
 // GET /api/booking/momo/return-get
 router.get('/momo/return-get', async (req, res) => {
   try{
@@ -993,7 +993,7 @@ router.get('/momo/return-get', async (req, res) => {
       transId, resultCode, message, payType, responseTime, extraData, signature
     } = req.query || {};
 
-    // Verify signature (same as IPN spec)
+    // Xác minh chữ ký (tương tự đặc tả IPN)
     const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
     const check = crypto.createHmac('sha256', secretKey).update(rawSignature).digest('hex');
     if(check !== signature){
@@ -1008,7 +1008,7 @@ router.get('/momo/return-get', async (req, res) => {
       const url = new URL(frontendReturn);
       url.searchParams.set('status', 'fail');
       url.searchParams.set('code', String(resultCode));
-      url.searchParams.set('msg', message || 'Payment failed');
+      url.searchParams.set('msg', message || 'Thanh toán thất bại');
       return res.redirect(url.toString());
     }
 
@@ -1020,7 +1020,7 @@ router.get('/momo/return-get', async (req, res) => {
     if(!lichKhamId){
       const url = new URL(frontendReturn);
       url.searchParams.set('status', 'fail');
-      url.searchParams.set('msg', 'Missing appointment id');
+      url.searchParams.set('msg', 'Thiếu mã lịch khám');
       return res.redirect(url.toString());
     }
 
@@ -1039,7 +1039,7 @@ router.get('/momo/return-get', async (req, res) => {
     if(!stt){
       const dayStart = startOfDay(appt.ngayKham);
       const dayEnd = endOfDay(appt.ngayKham);
-      // Count queue numbers already issued for appointments of this appointment day
+      // Đếm số thứ tự đã cấp cho các lịch khám trong cùng ngày của lịch này
       const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart, $lt: dayEnd } }).select('_id').lean();
       const idSet = apptIdsInDay.map(a => a._id);
       const existingCount = idSet.length
@@ -1063,7 +1063,7 @@ router.get('/momo/return-get', async (req, res) => {
   }
 });
 
-// Check ticket status for an appointment
+// Kiểm tra trạng thái vé/số thứ tự của một lịch khám
 // GET /api/booking/appointments/:id/ticket
 router.get('/appointments/:id/ticket', async (req, res, next) => {
   try{
@@ -1076,7 +1076,7 @@ router.get('/appointments/:id/ticket', async (req, res, next) => {
 });
 
 // GET /api/booking/appointments/:id/detail-simple
-// Mô tả: Trả thông tin cơ bản của lịch khám kèm bác sĩ và phòng khám để hiển thị cho user
+// Mô tả: Trả thông tin cơ bản của lịch khám kèm bác sĩ và phòng khám để hiển thị cho người dùng
 router.get('/appointments/:id/detail-simple', async (req, res, next) => {
   try{
     const { id } = req.params;
