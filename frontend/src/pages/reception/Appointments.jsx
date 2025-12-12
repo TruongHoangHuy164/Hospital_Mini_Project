@@ -1,3 +1,13 @@
+/**
+ * FILE: Appointments.jsx
+ * MÔ TẢ: Trang đặt lịch khám cho lễ tân (khách vãng lai)
+ * Chức năng:
+ * - Chọn chuyên khoa, bác sĩ, ngày khám, khung giờ
+ * - Tạo lịch hẹn mới
+ * - Thanh toán tiền mặt hoặc MoMo
+ * - Cấp số thứ tự tự động sau thanh toán
+ */
+
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../../components/reception/PageHeader';
 import Card from '../../components/reception/Card';
@@ -6,19 +16,24 @@ import { createCashPayment, createMomoPayment } from '../../api/payments';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function ReceptionAppointments(){
+  // Lấy tham số từ URL (nếu có)
   const urlParams = new URLSearchParams(location.search);
   const initialBenhNhanId = urlParams.get('benhNhanId') || '';
   const initialHoSoId = urlParams.get('hoSoBenhNhanId') || '';
   const initialHoSoKhamId = urlParams.get('hoSoKhamId') || '';
+  
+  // State quản lý thông tin bệnh nhân
   const [benhNhanId, setBenhNhanId] = useState(initialBenhNhanId);
   const [hoSoBenhNhanId, setHoSoBenhNhanId] = useState(initialHoSoId);
   const [hoSoKhamId, setHoSoKhamId] = useState(initialHoSoKhamId);
-  const [specialties, setSpecialties] = useState([]);
-  const [chuyenKhoaId, setChuyenKhoaId] = useState('');
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0,10));
-  const [availability, setAvailability] = useState(null);
-  const [selected, setSelected] = useState({ bacSiId: '', khungGio: ''});
-  const [appt, setAppt] = useState(null);
+  
+  // State quản lý đặt lịch
+  const [specialties, setSpecialties] = useState([]); // Danh sách chuyên khoa
+  const [chuyenKhoaId, setChuyenKhoaId] = useState(''); // Chuyên khoa được chọn
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0,10)); // Ngày khám
+  const [availability, setAvailability] = useState(null); // Lịch trống của bác sĩ
+  const [selected, setSelected] = useState({ bacSiId: '', khungGio: ''}); // Bác sĩ và giờ được chọn
+  const [appt, setAppt] = useState(null); // Lịch hẹn vửa tạo
   const [error, setError] = useState('');
 
   useEffect(()=>{ (async ()=>{

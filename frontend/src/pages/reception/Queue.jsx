@@ -1,24 +1,38 @@
+/**
+ * FILE: Queue.jsx
+ * MÔ TẢ: Trang quản lý danh sách số thứ tự khám bệnh cho lễ tân
+ * Chức năng:
+ * - Hiển thị danh sách bệnh nhân đã lấy STT trong ngày
+ * - Tìm kiếm bệnh nhân theo số điện thoại, mã BHYT
+ * - In phiếu khám bệnh với số thứ tự
+ * - Lọc theo ngày và bác sĩ
+ */
+
 import React, { useEffect, useState } from 'react';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function QueuePage(){
-  const [date, setDate] = useState(()=> new Date().toISOString().slice(0,10));
-  const [bacSiId, setBacSiId] = useState('');
-  const [items, setItems] = useState([]);
+  // State quản lý bộ lọc
+  const [date, setDate] = useState(()=> new Date().toISOString().slice(0,10)); // Ngày khám
+  const [bacSiId, setBacSiId] = useState(''); // ID bác sĩ được chọn
+  const [items, setItems] = useState([]); // Danh sách STT
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  // Tra cứu lịch hẹn
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResult, setSearchResult] = useState(null);
-  const [searchError, setSearchError] = useState('');
-  const [searching, setSearching] = useState(false);
+  // State quản lý tra cứu lịch hẹn
+  const [searchQuery, setSearchQuery] = useState(''); // Từ khóa tìm kiếm
+  const [searchResult, setSearchResult] = useState(null); // Kết quả tìm kiếm
+  const [searchError, setSearchError] = useState(''); // Lỗi khi tìm kiếm
+  const [searching, setSearching] = useState(false); // Trạng thái đang tìm
 
-  // Danh sách bác sĩ
-  const [doctors, setDoctors] = useState([]);
-  const [doctorSearch, setDoctorSearch] = useState('');
-  const [showDoctorDropdown, setShowDoctorDropdown] = useState(false);
+  // State quản lý danh sách bác sĩ
+  const [doctors, setDoctors] = useState([]); // Danh sách bác sĩ
+  const [doctorSearch, setDoctorSearch] = useState(''); // Từ khóa tìm bác sĩ
+  const [showDoctorDropdown, setShowDoctorDropdown] = useState(false); // Hiển thị dropdown
 
+  /**
+   * Tải danh sách bác sĩ từ API
+   */
   async function loadDoctors(){
     try{
       const res = await fetch(`${API_URL}/api/public/doctors`, {
@@ -29,6 +43,9 @@ export default function QueuePage(){
     }catch(e){ console.error('Lỗi tải danh sách bác sĩ:', e); }
   }
 
+  /**
+   * Tải danh sách số thứ tự theo ngày và bác sĩ
+   */
   async function load(){
     setLoading(true); setError('');
     try{
@@ -47,6 +64,10 @@ export default function QueuePage(){
     /* eslint-disable-next-line */ 
   }, []);
 
+  /**
+   * Tìm kiếm bệnh nhân theo số điện thoại, mã BHYT, hoặc họ tên
+   * Tìm trong danh sách đã load (items) thay vì gọi API
+   */
   async function searchAppointment(){
     if(!searchQuery.trim()){ setSearchError('Vui lòng nhập SĐT hoặc mã BHYT'); return; }
     setSearching(true); setSearchError(''); setSearchResult(null);
@@ -81,6 +102,10 @@ export default function QueuePage(){
     }
   }
 
+  /**
+   * In phiếu khám bệnh với số thứ tự
+   * Mở cửa sổ mới và hiển thị phiếu để in
+   */
   function printTicket(){
     if(!searchResult) return;
     const printWindow = window.open('', '_blank');

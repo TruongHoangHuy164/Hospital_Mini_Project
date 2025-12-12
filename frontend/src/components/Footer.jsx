@@ -1,6 +1,15 @@
+/**
+ * FILE: Footer.jsx
+ * MÔ TẢ: Component footer của website
+ * Hiển thị thông tin liên hệ, liên kết nhanh, mạng xã hội
+ */
+
 import React from 'react'
 import { Link } from 'react-router-dom'
 
+/**
+ * Component Footer chính
+ */
 export default function Footer() {
   return (
     <footer className="footer">

@@ -1,11 +1,19 @@
+/**
+ * FILE: Overview.jsx
+ * MÔ TẢ: Trang tổng quan cho Admin
+ * Hiển thị thống kê: số người dùng, bệnh nhân, bác sĩ online, doanh thu
+ */
+
 import React, { useEffect, useState } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function Overview() {
+  // State quản lý dữ liệu tổng quan
   const [data, setData] = useState({ usersCount: 0, patientsCount: 0, latestPatients: [], onlineByRole: { user: 0, doctor: 0, admin: 0 }, revenue: [] });
   const [error, setError] = useState('');
 
+  // Tải dữ liệu tổng quan khi component mount
   useEffect(() => {
     let mounted = true;
     async function load() {

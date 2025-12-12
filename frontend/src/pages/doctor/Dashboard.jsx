@@ -1,59 +1,73 @@
+/**
+ * FILE: Dashboard.jsx (Doctor)
+ * MÔ TẢ: Trang làm việc chính của bác sĩ
+ * Chức năng:
+ * - Xem danh sách bệnh nhân hôm nay (call queue)
+ * - Khám bệnh: nhập triệu chứng, khám lâm sàng, chỉ số sức khỏe
+ * - Chỉ định xét nghiệm và chụp chiếu
+ * - Kê đơn thuốc
+ * - Xem lịch sử khám bệnh của bệnh nhân
+ * - Xem kết quả xét nghiệm
+ */
+
 import React, { useEffect, useMemo, useState } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export default function DoctorDashboard() {
-  // ===== TAB STATE =====
+  // ===== QUẢN LÝ TAB =====
   const [activeTab, setActiveTab] = useState('call'); // 'call', 'history', 'exam', 'referral', 'results', 'prescription'
   
-  // ===== CORE STATES =====
+  // ===== STATE CỐT LÕI =====
   const todayDate = new Date().toISOString().slice(0,10);
-  const [todayPatients, setTodayPatients] = useState([]);
-  const [selectedCase, setSelectedCase] = useState(null);
-  const [caseDetail, setCaseDetail] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(todayDate); // Ngày khám để xem lịch sử
-  const [historyFilter, setHistoryFilter] = useState('today'); // 'today', 'month', 'custom'
+  const [todayPatients, setTodayPatients] = useState([]); // Danh sách bệnh nhân hôm nay
+  const [selectedCase, setSelectedCase] = useState(null); // Hồ sơ khám được chọn
+  const [caseDetail, setCaseDetail] = useState(null); // Chi tiết hồ sơ khám
+  const [selectedDate, setSelectedDate] = useState(todayDate); // Ngày xem lịch sử
+  const [historyFilter, setHistoryFilter] = useState('today'); // Bộ lọc lịch sử: 'today', 'month', 'custom'
   const [patientHistoryModal, setPatientHistoryModal] = useState(false); // Modal xem lịch sử khám
-  const [patientHistoryList, setPatientHistoryList] = useState([]); // Danh sách lần khám trước
-  const [selectedPatientHistory, setSelectedPatientHistory] = useState(null); // Bệnh nhân xem lịch sử
-  const [historySearchQuery, setHistorySearchQuery] = useState(''); // Tìm kiếm bệnh nhân để xem lịch sử
-  const [historySearchResults, setHistorySearchResults] = useState([]); // Kết quả tìm kiếm bệnh nhân
+  const [patientHistoryList, setPatientHistoryList] = useState([]); // Lịch sử khám của bệnh nhân
+  const [selectedPatientHistory, setSelectedPatientHistory] = useState(null); // Bệnh nhân đang xem lịch sử
+  const [historySearchQuery, setHistorySearchQuery] = useState(''); // Từ khóa tìm bệnh nhân
+  const [historySearchResults, setHistorySearchResults] = useState([]); // Kết quả tìm kiếm
   
-  // ===== STATISTICS STATES =====
+  // ===== STATE THỐNG KÊ =====
   const [stats, setStats] = useState({ chiDinhPending: 0, toaThuoc: 0 });
   
-  // ===== EXAMINATION STATES =====
+  // ===== STATE KHÁM BỆNH =====
   const [clinical, setClinical] = useState({ trieuChung: '', khamLamSang: '', huyetAp: '', nhipTim: '', nhietDo: '', canNang: '', chieuCao: '' });
   
-  // ===== REFERRAL/LAB STATES =====
-  const [labs, setLabs] = useState([]);
-  const [serviceQuery, setServiceQuery] = useState('');
-  const [serviceResults, setServiceResults] = useState([]);
-  const [specialties, setSpecialties] = useState([]);
-  const [selectedSpecialty, setSelectedSpecialty] = useState('');
+  // ===== STATE CHỈ ĐỊNH XÉT NGHIỆM =====
+  const [labs, setLabs] = useState([]); // Danh sách dịch vụ đã chọn
+  const [serviceQuery, setServiceQuery] = useState(''); // Từ khóa tìm dịch vụ
+  const [serviceResults, setServiceResults] = useState([]); // Kết quả tìm kiếm dịch vụ
+  const [specialties, setSpecialties] = useState([]); // Danh sách chuyên khoa
+  const [selectedSpecialty, setSelectedSpecialty] = useState(''); // Chuyên khoa được chọn
   const [loadingServices, setLoadingServices] = useState(false);
   const [servicesError, setServicesError] = useState('');
   const [loadingSpecialties, setLoadingSpecialties] = useState(false);
   const [specialtiesError, setSpecialtiesError] = useState('');
   
-  // ===== RESULTS/HISTORY STATES =====
-  const [history, setHistory] = useState([]);
-  const [prescriptions, setPrescriptions] = useState([]);
+  // ===== STATE KẾT QUẢ & LỊCH Sử =====
+  const [history, setHistory] = useState([]); // Lịch sử khám
+  const [prescriptions, setPrescriptions] = useState([]); // Đơn thuốc
   
-  // ===== PRESCRIPTION STATES =====
-  const [rxQuery, setRxQuery] = useState('');
-  const [rxResults, setRxResults] = useState([]);
-  const [rxItems, setRxItems] = useState([]);
-  const [medicineGroups, setMedicineGroups] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState('');
-  const [rxPriceOrder, setRxPriceOrder] = useState('');
+  // ===== STATE KÊ ĐƠN THUỐC =====
+  const [rxQuery, setRxQuery] = useState(''); // Từ khóa tìm thuốc
+  const [rxResults, setRxResults] = useState([]); // Kết quả tìm thuốc
+  const [rxItems, setRxItems] = useState([]); // Danh sách thuốc trong đơn
+  const [medicineGroups, setMedicineGroups] = useState([]); // Danh mục thuốc
+  const [selectedGroup, setSelectedGroup] = useState(''); // Danh mục được chọn
+  const [rxPriceOrder, setRxPriceOrder] = useState(''); // Sắp xếp theo giá
 
   const headers = useMemo(() => ({
     'Content-Type': 'application/json',
     Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}`,
   }), []);
 
-  // ===== LOAD TODAY'S PATIENT QUEUE =====
+  /**
+   * Tải danh sách bệnh nhân hôm nay
+   */
   async function loadTodayPatients(){
     try{
       const res = await fetch(`${API_URL}/api/doctor/today/patients`, { headers });
@@ -63,7 +77,9 @@ export default function DoctorDashboard() {
     }catch(e){ console.error(e); }
   }
 
-  // ===== LOAD HISTORY BY DATE =====
+  /**
+   * Tải lịch sử khám theo ngày cụ thể
+   */
   async function loadHistoryByDate(date){
     try{
       const res = await fetch(`${API_URL}/api/doctor/patients?date=${date}`, { headers });
@@ -74,7 +90,9 @@ export default function DoctorDashboard() {
     }
   }
 
-  // ===== LOAD HISTORY BY MONTH =====
+  /**
+   * Tải lịch sử khám theo tháng
+   */
   async function loadHistoryByMonth(year, month){
     try{
       const res = await fetch(`${API_URL}/api/doctor/patients?year=${year}&month=${month}`, { headers });

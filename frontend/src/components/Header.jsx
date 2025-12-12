@@ -1,5 +1,14 @@
+/**
+ * FILE: Header.jsx
+ * MÔ TẢ: Component header của trang chủ
+ * Hiển thị logo, thanh tìm kiếm, nút đặt lịch và hotline
+ */
+
 import React from 'react'
 
+/**
+ * Component Header chính của trang
+ */
 export default function Header() {
   return (
     <header className="header container">
@@ -24,6 +33,9 @@ export default function Header() {
   )
 }
 
+/**
+ * Component logo SVG hình dấu cộng y tế
+ */
 function Logo() {
   return (
     <svg width="44" height="44" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

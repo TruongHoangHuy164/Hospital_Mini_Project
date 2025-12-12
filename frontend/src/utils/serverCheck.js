@@ -1,6 +1,15 @@
-// Utility to check if backend server is running
+/**
+ * FILE: serverCheck.js
+ * MÔ TẢ: Utility kiểm tra trạng thái backend server
+ * Kiểm tra xem server có đang chạy hay không bằng cách gọi endpoint /health
+ */
+
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
+/**
+ * Kiểm tra trạng thái server
+ * @returns {Promise<Object>} { online: boolean, data?: Object, error?: string }
+ */
 export async function checkServerStatus() {
   try {
     console.log('Checking server status at:', API_URL);
@@ -30,6 +39,10 @@ export async function checkServerStatus() {
   }
 }
 
+/**
+ * Test kết nối server và log kết quả
+ * @returns {Promise<boolean>} true nếu server online, false nếu không
+ */
 export async function testServerConnection() {
   const result = await checkServerStatus();
   

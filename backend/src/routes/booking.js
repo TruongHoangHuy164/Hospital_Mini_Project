@@ -489,25 +489,8 @@ router.post('/appointments', auth, async (req, res, next) => {
     const lk = await LichKham.create(appointmentData);
     console.log('Created appointment:', lk._id);
 
-    // For walk-in: immediately assign next queue number for the day
-    if(isWalkIn){
-      if(!appointmentData.benhNhanId){
-        // An toàn: về lý thuyết benhNhanId đã được gán ở trên cho cả tự đặt và đặt cho người thân
-        console.warn('Lịch tiếp nhận trực tiếp thiếu benhNhanId, không thể tạo số thứ tự');
-        return res.status(201).json(lk);
-      }
-      const dayStart2 = startOfDay(lk.ngayKham);
-      const dayEnd2 = endOfDay(lk.ngayKham);
-      const apptIdsInDay = await LichKham.find({ ngayKham: { $gte: dayStart2, $lt: dayEnd2 } }).select('_id').lean();
-      const idSet = apptIdsInDay.map(a => a._id);
-      const existingCount = idSet.length
-        ? await SoThuTu.countDocuments({ lichKhamId: { $in: idSet } })
-        : 0;
-      const so = existingCount + 1;
-      const stt = await SoThuTu.create({ lichKhamId: lk._id, benhNhanId: appointmentData.benhNhanId, soThuTu: so, trangThai: 'dang_cho' });
-      return res.status(201).json({ lichKham: lk, soThuTu: stt });
-    }
-
+    // For walk-in: không tự động cấp STT, chỉ cấp khi thanh toán
+    // Return appointment without queue number
     res.status(201).json(lk);
   }catch(err){
     console.error('Booking error:', err);
@@ -808,6 +791,7 @@ router.get('/doctor-available-days', async (req, res, next) => {
 router.post('/appointments/:id/momo', async (req, res, next) => {
   try{
     const { id } = req.params;
+    const { returnUrl } = req.body; // Nhận returnUrl từ frontend
     const appt = await LichKham.findById(id);
     if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
     if(appt.trangThai === 'da_thanh_toan') return res.status(400).json({ message: 'Đã thanh toán' });
@@ -831,7 +815,8 @@ router.post('/appointments/:id/momo', async (req, res, next) => {
     const orderId = `APPT_${id}_${Date.now()}`;
     const requestId = `${Date.now()}`;
     const orderInfo = 'Thanh toán lịch khám';
-    const extraDataObj = { lichKhamId: id };
+    // Lưu returnUrl trong extraData để backend biết redirect về đâu
+    const extraDataObj = { lichKhamId: id, returnUrl: returnUrl || null };
     const extraData = Buffer.from(JSON.stringify(extraDataObj)).toString('base64');
 
     const rawSignature = `accessKey=${accessKey}&amount=${amountStr}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${orderId}&orderInfo=${orderInfo}&partnerCode=${partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=${requestType}`;
@@ -986,12 +971,21 @@ router.get('/momo/return-get', async (req, res) => {
   try{
     const accessKey = process.env.MOMO_ACCESS_KEY || 'F8BBA842ECF85';
     const secretKey = process.env.MOMO_SECRET_KEY || 'K951B6PE1waDMi640xX08PD3vg6EkVlz';
-    const frontendReturn = process.env.FRONTEND_RETURN_URL || 'http://localhost:5173/booking';
+    const frontendReturnDefault = process.env.FRONTEND_RETURN_URL || 'http://localhost:5173/reception/direct-booking';
 
     const {
       partnerCode, orderId, requestId, amount, orderInfo, orderType,
       transId, resultCode, message, payType, responseTime, extraData, signature
     } = req.query || {};
+
+    // Giải mã extraData để lấy returnUrl
+    let lichKhamId = null;
+    let frontendReturn = frontendReturnDefault;
+    try{
+      const j = JSON.parse(Buffer.from(extraData||'', 'base64').toString('utf8')||'{}');
+      lichKhamId = j.lichKhamId;
+      if(j.returnUrl) frontendReturn = j.returnUrl; // Sử dụng returnUrl từ frontend nếu có
+    }catch{}
 
     // Xác minh chữ ký (tương tự đặc tả IPN)
     const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
@@ -1012,11 +1006,6 @@ router.get('/momo/return-get', async (req, res) => {
       return res.redirect(url.toString());
     }
 
-    let lichKhamId = null;
-    try{
-      const j = JSON.parse(Buffer.from(extraData||'', 'base64').toString('utf8')||'{}');
-      lichKhamId = j.lichKhamId;
-    }catch{}
     if(!lichKhamId){
       const url = new URL(frontendReturn);
       url.searchParams.set('status', 'fail');
@@ -1055,7 +1044,7 @@ router.get('/momo/return-get', async (req, res) => {
     url.searchParams.set('stt', String(stt.soThuTu));
     return res.redirect(url.toString());
   }catch(err){
-    const frontendReturn = process.env.FRONTEND_RETURN_URL || 'http://localhost:5173/booking';
+    const frontendReturn = process.env.FRONTEND_RETURN_URL || 'http://localhost:5173/reception/direct-booking';
     const url = new URL(frontendReturn);
     url.searchParams.set('status', 'fail');
     url.searchParams.set('msg', 'Server error');
