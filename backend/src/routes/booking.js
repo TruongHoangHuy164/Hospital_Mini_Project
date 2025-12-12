@@ -268,6 +268,13 @@ router.get('/availability', async (req, res, next) => {
     if(!chuyenKhoaId || !date) return res.status(400).json({ message: 'Thiếu chuyenKhoaId hoặc date' });
     const d = new Date(date);
     if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
+    // Chặn hiển thị lịch trống cho ngày hôm nay hoặc ngày trong quá khứ
+    // Mục tiêu: người dùng không thể đặt lịch cho hôm nay hoặc ngày đã qua
+    const todayStart = startOfDay(new Date());
+    const reqDayStart = startOfDay(d);
+    if(reqDayStart.getTime() <= todayStart.getTime()){
+      return res.json({ date, chuyenKhoaId, doctors: [], shiftHours: { sang:{}, chieu:{}, toi:{} } });
+    }
     // Tải chuyên khoa
     const spec = await ChuyenKhoa.findById(chuyenKhoaId);
     if(!spec) return res.status(404).json({ message: 'Chuyên khoa không tồn tại' });
@@ -376,6 +383,13 @@ router.post('/appointments', auth, async (req, res, next) => {
     const d = isWalkIn && !date ? new Date() : new Date(date);
     if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
     const dayStart = startOfDay(d);
+
+    // Chặn đặt lịch cho ngày hôm nay hoặc ngày đã qua đối với người dùng (không phải tiếp nhận trực tiếp)
+    // Lịch tiếp nhận trực tiếp (walk-in) vẫn được phép trong cùng ngày nếu hệ thống cho phép
+    const todayStart = startOfDay(new Date());
+    if(!isWalkIn && dayStart.getTime() <= todayStart.getTime()){
+      return res.status(400).json({ message: 'Không thể đặt lịch cho ngày hôm nay hoặc ngày đã qua.' });
+    }
 
     const appointmentData = {
       nguoiDatId,

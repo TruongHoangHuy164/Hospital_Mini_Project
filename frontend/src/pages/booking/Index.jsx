@@ -21,6 +21,31 @@ export default function BookingPage(){
   const [specialties, setSpecialties] = useState([]);
   const [chuyenKhoaId, setChuyenKhoaId] = useState('');
   const [date, setDate] = useState('');
+  // Helper: chặn chọn ngày hôm nay và các ngày trước hôm nay
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }, []);
+  const minDate = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate()+1); // tối thiểu là ngày mai
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }, []);
+
+  // Nếu người dùng cố set ngày không hợp lệ (hôm nay hoặc quá khứ), tự động reset và cảnh báo
+  useEffect(() => {
+    if(!date) return;
+    try{
+      const chosen = new Date(date);
+      const chosenStart = new Date(chosen.getFullYear(), chosen.getMonth(), chosen.getDate());
+      const todayStart = new Date();
+      const ts = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate());
+      if(chosenStart.getTime() <= ts.getTime()){
+        toast.warning('Vui lòng chọn ngày từ ngày mai trở đi.');
+        setDate('');
+      }
+    }catch{}
+  }, [date]);
 
   // Step 3 state
   const [availability, setAvailability] = useState(null);
@@ -378,13 +403,20 @@ export default function BookingPage(){
               </div>
               <div className="col-md-6">
                 <label className="form-label">Ngày khám</label>
-                <input type="date" className="form-control" value={date} onChange={e=>setDate(e.target.value)} />
+                <input
+                  type="date"
+                  className="form-control"
+                  value={date}
+                  min={minDate}
+                  onChange={e=>setDate(e.target.value)}
+                />
+                <div className="form-text">Không thể đặt lịch cho hôm nay hoặc ngày đã qua.</div>
               </div>
             </div>
           </div>
           <div className="card-footer d-flex justify-content-between">
             <button className="btn btn-outline-secondary" onClick={()=>setStep(1)}>Quay lại</button>
-            <button className="btn btn-primary" onClick={checkAvailability}>Xem lịch trống</button>
+            <button className="btn btn-primary" onClick={checkAvailability} disabled={!date || date < minDate}>Xem lịch trống</button>
           </div>
         </div>
       )}
