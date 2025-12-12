@@ -33,6 +33,7 @@ async function request(path, options = {}) {
 
     let res = await fetch(url, { ...options, headers });
     
+    // Nếu token hết hạn (401), tự động làm mới token và thử lại
     if (res.status === 401 && tokens.refreshToken && path !== '/api/auth/refresh') {
       console.log('Auth: Attempting token refresh...');
       // Thử refresh token
@@ -81,7 +82,7 @@ export async function register(name, email, phone, password) {
     }
 
     const data = await res.json();
-    setTokens(data);
+    setTokens(data); // Lưu token sau khi đăng ký thành công
     console.log('Auth: Registration successful');
     return data.user;
   } catch (error) {
@@ -99,7 +100,7 @@ export async function login(email, password) {
     console.log('Auth: Attempting login for', email);
     const payload = { password };
     if (email && email.includes('@')) payload.email = email;
-    else payload.identifier = email;
+    else payload.identifier = email; // Có thể là số điện thoại
     const res = await request('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
@@ -112,7 +113,7 @@ export async function login(email, password) {
     }
     
     const data = await res.json();
-    setTokens(data);
+    setTokens(data); // Lưu token sau khi đăng nhập thành công
     console.log('Auth: Login successful');
     return data.user;
   } catch (error) {
@@ -133,7 +134,7 @@ export async function logout() {
       body: JSON.stringify({ refreshToken }),
     });
   }
-  clearTokens();
+  clearTokens(); // Xóa token khỏi trình duyệt
 }
 
 // Lấy thông tin hồ sơ người dùng hiện tại

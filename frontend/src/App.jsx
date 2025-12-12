@@ -1,3 +1,10 @@
+/**
+ * FILE: App.jsx
+ * MÔ TẢ: Component gốc của ứng dụng
+ * Định tuyến (routing) cho tất cả các trang trong hệ thống
+ * Bao gồm: Trang chủ, Admin, Bác sĩ, Lễ tân, Xét nghiệm, Nhà thuốc, v.v.
+ */
+
 import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Topbar from './components/Topbar'
@@ -164,7 +171,8 @@ export default function App() {
         <Route path="dashboard" element={<ReceptionDashboard />} />
         <Route path="intake" element={<Intake />} />
         <Route path="patients/new" element={<NewPatient />} />
-        {/* Removed deprecated /reception/appointments route; use direct-booking instead */}
+        {/* Redirect /reception/appointments to direct-booking for backward compatibility */}
+        <Route path="appointments" element={<Navigate to="/reception/direct-booking" replace />} />
   <Route path="queue" element={<QueuePage />} />
         <Route path="lookup" element={<Lookup />} />
         <Route path="print" element={<ReceptionPrint />} />

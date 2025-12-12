@@ -1,13 +1,24 @@
+/**
+ * FILE: Dashboard.jsx (Pharmacy)
+ * MÔ TẢ: Trang tổng quan của Nhà thuốc
+ * Hiển thị thống kê đơn thuốc: chờ thanh toán, đã thanh toán, đang chuẩn bị, hoàn tất
+ * Hiển thị danh sách đơn thuốc gần đây
+ */
+
 import React, { useEffect, useState } from 'react';
 import { getPharmacyStats, getPharmacyOrders } from '../../api/pharmacy';
 
 export default function PharmacyDashboard() {
+  // State quản lý thống kê
   const [stats, setStats] = useState({ waiting: 0, paid: 0, preparing: 0, completed: 0 });
-  const [recentOrders, setRecentOrders] = useState([]);
+  const [recentOrders, setRecentOrders] = useState([]); // Đơn thuốc gần đây
   const [loading, setLoading] = useState(false);
 
   const today = new Date().toISOString().split('T')[0];
 
+  /**
+   * Tải dữ liệu thống kê và đơn thuốc
+   */
   const load = async () => {
     setLoading(true);
     try {
@@ -26,6 +37,7 @@ export default function PharmacyDashboard() {
 
   useEffect(() => { load(); }, []);
 
+  // Map trạng thái đơn thuốc sang badge Bootstrap
   const statusBadgeMap = {
     'issued': { bg: 'warning', text: 'Chờ thanh toán' },
     'pending_pharmacy': { bg: 'info', text: 'Đã thanh toán' },

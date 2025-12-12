@@ -1,3 +1,8 @@
+/**
+ * FILE: users.js
+ * MÔ TẢ: API calls cho quản lý người dùng (dành cho admin)
+ */
+
 import { privateApi } from './axios';
 
 // Lấy danh sách người dùng theo vai trò (endpoint chỉ dành cho admin)

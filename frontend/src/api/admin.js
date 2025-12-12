@@ -1,3 +1,9 @@
+/**
+ * FILE: admin.js
+ * MÔ TẢ: API calls cho chức năng quản trị viên
+ * Bao gồm thống kê đặt lịch và các báo cáo
+ */
+
 import { privateApi } from './axios';
 
 // Lấy thống kê đặt lịch cho admin

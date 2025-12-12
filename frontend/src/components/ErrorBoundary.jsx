@@ -1,3 +1,10 @@
+/**
+ * FILE: ErrorBoundary.jsx
+ * MÔ TẢ: Component bắt lỗi React (React Error Boundary)
+ * Bắt tất cả lỗi JavaScript trong cây component con và hiển thị UI dự phòng
+ * Ngăn chặn toàn bộ ứng dụng bị crash khi có lỗi
+ */
+
 import React, { Component } from 'react';
 
 class ErrorBoundary extends Component {
@@ -6,15 +13,24 @@ class ErrorBoundary extends Component {
     this.state = { hasError: false, error: null };
   }
 
+  /**
+   * Phương thức static được gọi khi có lỗi xảy ra
+   * Cập nhật state để hiển thị UI lỗi
+   */
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
 
+  /**
+   * Phương thức được gọi sau khi lỗi đã được bắt
+   * Dùng để log thông tin lỗi ra console
+   */
   componentDidCatch(error, errorInfo) {
     console.error('Error caught by boundary:', error, errorInfo);
   }
 
   render() {
+    // Nếu có lỗi, hiển thị UI lỗi
     if (this.state.hasError) {
       return (
         <div style={{ 

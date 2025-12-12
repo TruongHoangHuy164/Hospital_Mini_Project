@@ -1,8 +1,18 @@
+/**
+ * FILE: Navbar.jsx
+ * MÔ TẢ: Component thanh navigation chính của website
+ * Hiển thị menu các trang: Giới thiệu, Chuyên khoa, Dịch vụ, Tin tức, v.v.
+ * Thay đổi theo vai trò người dùng (admin, pharmacy, patient)
+ */
+
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import UserMenu from './UserMenuSimple'
 
+/**
+ * Component Navigation Bar
+ */
 export default function Navbar() {
   const { user, isAuthenticated, signOut } = useAuth();
   return (
