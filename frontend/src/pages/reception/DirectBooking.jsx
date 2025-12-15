@@ -27,6 +27,64 @@ export default function DirectBooking(){
   const [lastPayload, setLastPayload] = useState(null);
   const [lastResponse, setLastResponse] = useState(null);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [doctorInfo, setDoctorInfo] = useState(null);
+  const [patientInfo, setPatientInfo] = useState(null);
+  const [fullAppointmentData, setFullAppointmentData] = useState(null);
+  const [patientNameFromUrl, setPatientNameFromUrl] = useState('');
+
+  // Lấy tên bệnh nhân từ URL params nếu có
+  useEffect(() => {
+    const name = params.get('patientName') || params.get('hoTen') || '';
+    if(name) setPatientNameFromUrl(decodeURIComponent(name));
+  }, [params]);
+
+  /**
+   * Fetch chi tiết appointment với đầy đủ thông tin populate
+   * Sử dụng API queues giống Queue.jsx để lấy data đã populate đầy đủ
+   */
+  async function fetchAppointmentDetail(appointmentId){
+    try{
+      // Lấy ngày hiện tại
+      const today = new Date().toISOString().slice(0,10);
+      
+      // Fetch từ API queues - backend đã populate đầy đủ
+      const res = await fetch(`${API_URL}/api/booking/queues?date=${today}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if(!res.ok) throw await res.json();
+      const queues = await res.json();
+      
+      // Tìm queue item theo appointmentId
+      const queueItem = queues.find(q => 
+        String(q.lichKhamId || q._id) === String(appointmentId) ||
+        String(q._id) === String(appointmentId)
+      );
+      
+      if(queueItem){
+        console.log('✅ Found queue item with full data:', queueItem);
+        setFullAppointmentData(queueItem);
+        
+        // Update ticket info nếu có
+        if(queueItem.soThuTu){
+          setTicket({
+            soThuTu: queueItem.soThuTu,
+            trangThai: queueItem.trangThai,
+            ngay: queueItem.ngayKham
+          });
+        }
+        
+        return queueItem;
+      } else {
+        console.warn('⚠️ Queue item not found for appointment:', appointmentId);
+      }
+      
+      return null;
+    }catch(e){
+      console.error('❌ Lỗi tải chi tiết appointment:', e);
+      return null;
+    }
+  }
 
   // Xử lý kết quả thanh toán MoMo từ URL params
   useEffect(() => {
@@ -98,9 +156,13 @@ export default function DirectBooking(){
       // Handle both shapes: { appointmentDoc } or { lichKham, soThuTu }
       if(json && json.lichKham){
         setAppointment(json.lichKham);
+        // Fetch chi tiết để có đầy đủ thông tin
+        await fetchAppointmentDetail(json.lichKham._id || json.lichKham.id);
         if(json.soThuTu){ setTicket(json.soThuTu); }
       } else {
         setAppointment(json);
+        // Fetch chi tiết để có đầy đủ thông tin
+        await fetchAppointmentDetail(json._id || json.id);
       }
     }catch(e){ setError(e?.message||'Lỗi tạo lịch'); }
     finally{ setCreating(false); }
@@ -121,6 +183,54 @@ export default function DirectBooking(){
     })();
     return () => { mounted = false; };
   }, [token]);
+
+  // Load patient info
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try{
+        if(!benhNhanId && !hoSoBenhNhanId) {
+          console.warn('No patient ID found in URL params');
+          return;
+        }
+        
+        // Try to get patient profile first
+        if(hoSoBenhNhanId){
+          console.log('Fetching patient profile:', hoSoBenhNhanId);
+          const res = await fetch(`${API_URL}/api/patient-profiles/${hoSoBenhNhanId}`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          console.log('Patient profile response:', res.status, res.ok);
+          if(res.ok){
+            const json = await res.json();
+            console.log('✅ Loaded patient profile:', json);
+            if(mounted) setPatientInfo(json);
+            return;
+          } else {
+            const error = await res.json().catch(() => ({}));
+            console.error('❌ Failed to load patient profile:', error);
+          }
+        }
+        
+        // Fallback to booking/patients API
+        if(benhNhanId){
+          console.log('Fetching from booking/patients:', benhNhanId);
+          const res = await fetch(`${API_URL}/api/booking/patients`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if(res.ok){
+            const patients = await res.json();
+            const patient = patients.find(p => (p._id || p.id) === benhNhanId);
+            console.log('✅ Loaded patient from booking:', patient);
+            if(mounted && patient) setPatientInfo(patient);
+          }
+        }
+      }catch(e){ 
+        console.error('❌ Lỗi tải thông tin bệnh nhân:', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [benhNhanId, hoSoBenhNhanId, token]);
 
   // Load doctors by specialty (use public endpoint to avoid 403)
   useEffect(() => {
@@ -144,6 +254,52 @@ export default function DirectBooking(){
     })();
     return () => { mounted = false; };
   }, [specialtyId, token]);
+  
+  // Update doctor info when doctor is selected - fetch full info với phòng khám
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if(!doctorId) return;
+      try{
+        // Tìm trong list đã load
+        const selectedDoctor = doctors.find(d => (d._id || d.id) === doctorId);
+        if(!selectedDoctor) return;
+        
+        console.log('Selected doctor:', selectedDoctor);
+        
+        // Nếu có phongKhamId, fetch tên phòng khám
+        if(selectedDoctor.phongKhamId){
+          console.log('Fetching clinic info for:', selectedDoctor.phongKhamId);
+          const res = await fetch(`${API_URL}/api/clinics?simple=1`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if(res.ok){
+            const clinics = await res.json();
+            console.log('Clinics list:', clinics);
+            const clinic = clinics.find(c => (c._id || c.id) === selectedDoctor.phongKhamId);
+            console.log('Found clinic:', clinic);
+            if(clinic && mounted){
+              setDoctorInfo({
+                ...selectedDoctor,
+                phongKham: { _id: clinic._id || clinic.id, tenPhong: clinic.tenPhong || clinic.ten || clinic.name }
+              });
+              console.log('✅ Doctor info with clinic set');
+              return;
+            }
+          }
+        }
+        
+        // Fallback: không có phòng khám
+        if(mounted) {
+          setDoctorInfo(selectedDoctor);
+          console.log('✅ Doctor info set (no clinic)');
+        }
+      }catch(e){
+        console.error('❌ Lỗi fetch doctor info:', e);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [doctorId, doctors, token]);
 
   // Load doctors who have work schedule today
   const [onlyTodayWorking, setOnlyTodayWorking] = useState(true);
@@ -246,12 +402,16 @@ export default function DirectBooking(){
       // For cash, expect soThuTu in response
       if(json?.soThuTu){
         setTicket(json.soThuTu);
+        // Fetch lại chi tiết appointment sau khi thanh toán
+        await fetchAppointmentDetail(appointment._id);
         alert(`Đã cấp STT: ${json.soThuTu.soThuTu || json.soThuTu.stt}`);
       } else if(json?.ticket){
         setTicket(json.ticket);
+        await fetchAppointmentDetail(appointment._id);
         alert(`Đã cấp STT: ${json.ticket.soThuTu || json.ticket.stt}`);
       } else {
         setTicket(json);
+        await fetchAppointmentDetail(appointment._id);
       }
     }catch(e){ 
       console.error('Payment error:', e);
@@ -291,9 +451,11 @@ export default function DirectBooking(){
       
       if(json?.soThuTu){
         setTicket(json.soThuTu);
+        await fetchAppointmentDetail(appointment._id);
         alert(`Đã cấp STT: ${json.soThuTu.soThuTu || json.soThuTu.stt}`);
       } else {
         setTicket(json?.ticket || json);
+        await fetchAppointmentDetail(appointment._id);
       }
     }catch(e){ 
       console.error('Queue only error:', e);
@@ -301,6 +463,50 @@ export default function DirectBooking(){
     } finally {
       setPaymentProcessing(false);
     }
+  }
+
+  /**
+   * In phiếu khám bệnh với số thứ tự
+   */
+  function printTicket(){
+    if(!ticket || !appointment){ 
+      alert('Chưa có thông tin để in phiếu');
+      return; 
+    }
+    
+    // Ưu tiên lấy từ fullAppointmentData (từ API queues - đã populate đầy đủ)
+    const queueData = fullAppointmentData;
+    
+    // Get patient name
+    const patientName = queueData?.benhNhan?.hoTen ||
+                       patientNameFromUrl || 
+                       patientInfo?.hoTen || 
+                       appointment.benhNhan?.hoTen || 
+                       appointment.hoSoBenhNhan?.hoTen || 
+                       'Bệnh nhân';
+    
+    // Get doctor info  
+    const doctorName = queueData?.bacSi?.hoTen ||
+                      doctorInfo?.hoTen || 
+                      appointment.bacSi?.hoTen || 
+                      'Bác sĩ';
+    
+    const clinicName = queueData?.bacSi?.phongKham?.tenPhong ||
+                      doctorInfo?.phongKham?.tenPhong || 
+                      appointment.bacSi?.phongKham?.tenPhong || 
+                      'Phòng khám';
+    
+    console.log('=== PRINT DATA ===');
+    console.log('Queue data:', queueData);
+    console.log('Patient:', patientName);
+    console.log('Doctor:', doctorName);
+    console.log('Clinic:', clinicName);
+    console.log('==================');
+    
+    const printWindow = window.open('', '_blank');
+    const htmlContent = '<!DOCTYPE html><html><head><title>Phiếu khám bệnh</title><style>body { font-family: Arial, sans-serif; padding: 20px; } .ticket { max-width: 400px; margin: 0 auto; border: 2px solid #333; padding: 20px; } .header { text-align: center; margin-bottom: 20px; border-bottom: 2px solid #333; padding-bottom: 10px; } .stt { font-size: 48px; font-weight: bold; text-align: center; color: #2c3e50; margin: 20px 0; } .info { margin: 10px 0; } .label { font-weight: bold; display: inline-block; width: 120px; } @media print { body { padding: 0; } }</style></head><body><div class="ticket"><div class="header"><h2>PHIẾU KHÁM BỆNH</h2><p>' + new Date(appointment.ngayKham).toLocaleDateString('vi-VN') + '</p></div><div class="stt">STT: ' + (ticket.soThuTu || ticket.stt || '-') + '</div><div class="info"><span class="label">Họ tên:</span> ' + patientName + '</div><div class="info"><span class="label">Bác sĩ:</span> ' + doctorName + '</div><div class="info"><span class="label">Phòng khám:</span> ' + clinicName + '</div><div class="info"><span class="label">Giờ khám:</span> ' + (appointment.khungGio || queueData?.khungGio || '-') + '</div><div style="margin-top: 30px; text-align: center; font-size: 12px; color: #666;">Vui lòng đến đúng giờ và mang theo giấy tờ tùy thân</div></div><script>window.onload = function(){ window.print(); }</script></body></html>';
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
   }
 
   return (
@@ -454,7 +660,7 @@ export default function DirectBooking(){
             </div>
             <button 
               className="btn btn-sm btn-outline-primary mt-2"
-              onClick={() => window.print()}
+              onClick={printTicket}
             >
               <i className="bi bi-printer"></i> In phiếu
             </button>
@@ -462,7 +668,7 @@ export default function DirectBooking(){
         </div>
       )}
 
-      <div className="card mt-3">
+      {/* <div className="card mt-3">
         <div className="card-body">
           <h6 className="card-title">Debug</h6>
           <div className="small text-muted">Xem chi tiết payload/response để tìm thiếu dữ liệu</div>
@@ -472,7 +678,7 @@ export default function DirectBooking(){
             selections: { benhNhanId, hoSoBenhNhanId, specialtyId, doctorId },
           }, null, 2)}</pre>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }
