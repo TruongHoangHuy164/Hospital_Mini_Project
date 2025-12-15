@@ -40,9 +40,20 @@ export default function Highlights() {
         {items.map(post => (
           <div className="col-md-4" key={post.slug}>
             <article className="card h-100" style={{ transition: 'transform .15s ease, box-shadow .15s ease' }}>
-              {post.coverImage && (
-                <img src={post.coverImage} alt={post.title} className="card-img-top" />
-              )}
+              {/* Ảnh cố định chiều cao để các thẻ đều nhau */}
+              <div style={{ height: 180, overflow: 'hidden' }}>
+                {post.coverImage ? (
+                  <img
+                    src={post.coverImage}
+                    alt={post.title}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
+                ) : (
+                  <div className="bg-light w-100 h-100 d-flex align-items-center justify-content-center text-muted small">
+                    Không có ảnh
+                  </div>
+                )}
+              </div>
               <div className="card-body d-flex flex-column">
                 <h5 className="card-title mb-2">{post.title}</h5>
                 {post.publishedAt && (
