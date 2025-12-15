@@ -59,6 +59,7 @@ export default function DoctorDashboard() {
   const [medicineGroups, setMedicineGroups] = useState([]); // Danh mục thuốc
   const [selectedGroup, setSelectedGroup] = useState(''); // Danh mục được chọn
   const [rxPriceOrder, setRxPriceOrder] = useState(''); // Sắp xếp theo giá
+  const [submittingRx, setSubmittingRx] = useState(false); // Trạng thái gửi kê đơn để chống double-click
 
   const headers = useMemo(() => ({
     'Content-Type': 'application/json',
@@ -106,6 +107,40 @@ export default function DoctorDashboard() {
   useEffect(() => { 
     loadTodayPatients(); 
     loadTodayStats();
+  }, []);
+
+  // ===== REALTIME (POLLING) FOR TODAY PATIENTS =====
+  // Tự động cập nhật danh sách bệnh nhân hôm nay theo chu kỳ, tạm dừng khi tab bị ẩn
+  useEffect(() => {
+    const intervalMs = 7000; // 7 giây một lần (cân bằng tải và độ trễ)
+    let timer = null;
+
+    function startPolling(){
+      if(timer) return;
+      timer = setInterval(() => {
+        // Tránh gọi khi tab bị ẩn để giảm tải
+        if(document.hidden) return;
+        loadTodayPatients();
+      }, intervalMs);
+    }
+
+    function stopPolling(){
+      if(timer){ clearInterval(timer); timer = null; }
+    }
+
+    const onVisibilityChange = () => {
+      if(document.hidden){ stopPolling(); }
+      else { startPolling(); }
+    };
+
+    // Bắt đầu polling khi vào trang và tab đang hiển thị
+    if(!document.hidden){ startPolling(); }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      stopPolling();
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   // ===== LOAD PATIENT PREVIOUS VISITS =====
@@ -375,9 +410,11 @@ export default function DoctorDashboard() {
   function removeItem(idx){ setRxItems(items => items.filter((_,i)=>i!==idx)); }
 
   async function submitPrescription(){
+    if(submittingRx) return; // tránh double click
+    setSubmittingRx(true);
     try{
-      if(!selectedCase?._id) return alert('Chọn hồ sơ khám');
-      if(rxItems.length===0) return alert('Chưa chọn thuốc');
+      if(!selectedCase?._id) { alert('Chọn hồ sơ khám'); return; }
+      if(rxItems.length===0) { alert('Chưa chọn thuốc'); return; }
       const payload = { items: rxItems.map(x => ({
         thuocId: x.thuoc._id,
         soLuong: x.soLuong,
@@ -388,18 +425,23 @@ export default function DoctorDashboard() {
         usageNote: x.usageNote||''
       })) };
       const res = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/prescriptions`, { method:'POST', headers, body: JSON.stringify(payload) });
-      const json = await res.json();
-      if(!res.ok) throw json;
+      let json = null;
+      try { json = await res.json(); } catch { json = {}; }
+      if(!res.ok) { throw (json || { message: 'Kê đơn thất bại' }); }
+      // Thành công: làm sạch form và hiển thị thông báo ngay
       setRxItems([]); setRxResults([]); setRxQuery('');
-      // Sau khi kê đơn: chuyển trạng thái hồ sơ sang 'hoan_tat' và cập nhật danh sách
+      if(json?.case){ setCaseDetail(json.case); setSelectedCase(json.case); }
+      alert('Đã kê đơn - Hồ sơ đã chuyển sang trạng thái Khám xong');
+      // Các bước tải dữ liệu tiếp theo tách riêng để nếu lỗi không ảnh hưởng thông báo thành công
       try{
-        const res2 = await fetch(`${API_URL}/api/doctor/cases/${selectedCase._id}/status`, { method:'PUT', headers, body: JSON.stringify({ trangThai: 'hoan_tat' }) });
-        const js2 = await res2.json(); if(!res2.ok) throw js2;
-      }catch(e){ /* nếu API chưa có, bỏ qua */ }
-      alert('Đã kê đơn - Hồ sơ chuyển sang trạng thái Hoàn tất (Khám xong)');
-      await loadPrescriptions(selectedCase._id);
-      await loadTodayPatients();
-    }catch(e){ alert(e?.message || 'Kê đơn thất bại'); }
+        await loadPrescriptions((json?.case?._id) || selectedCase._id);
+        await loadTodayPatients();
+      }catch(e){ console.warn('Lỗi cập nhật dữ liệu sau kê đơn:', e); }
+    }catch(e){
+      alert(e?.message || 'Kê đơn thất bại');
+    } finally {
+      setSubmittingRx(false);
+    }
   }
 
   async function completeVisit(){
@@ -686,19 +728,26 @@ export default function DoctorDashboard() {
                     </thead>
                     <tbody>
                       {todayPatients.map((it, idx) => {
-                        const year = it.benhNhan?.ngaySinh ? new Date(it.benhNhan.ngaySinh).getFullYear() : '';
+                        // Tính năm sinh an toàn: nếu thiếu hoặc ngày không hợp lệ thì hiển thị '-'
+                        const year = (() => {
+                          const dob = it.benhNhan?.ngaySinh;
+                          if(!dob) return '-';
+                          const dt = new Date(dob);
+                          const y = dt.getFullYear();
+                          return Number.isFinite(y) ? y : '-';
+                        })();
                         let stLabel = 'Chờ khám';
                         let stBadge = 'bg-warning';
                         
                         // Kiểm tra trạng thái tổng thể của LichKham
-                        if(it.trangThai === 'hoan_tat') {
+                        if(it.trangThai === 'hoan_tat' || it.trangThai === 'da_kham') {
                           stLabel = '✅ Khám xong';
                           stBadge = 'bg-success';
                         } else if(selectedCase && caseDetail?.benhNhanId?._id === it.benhNhan?._id) {
                           stLabel = 'Đang khám';
                           stBadge = 'bg-info';
                         }
-                        const disabled = !it.soThuTu || it.trangThai === 'hoan_tat';
+                        const disabled = !it.soThuTu || it.trangThai === 'hoan_tat' || it.trangThai === 'da_kham';
                         return (
                           <tr key={idx} className={selectedCase?.benhNhanId?._id === it.benhNhan?._id ? 'table-active' : ''}>
                             <td>
@@ -1486,7 +1535,7 @@ export default function DoctorDashboard() {
                 <button
                   className="btn btn-success"
                   onClick={submitPrescription}
-                  disabled={rxItems.length === 0}
+                  disabled={submittingRx || rxItems.length === 0}
                 >
                   <i className="bi bi-check-circle me-1"></i>Lưu đơn → Chờ lấy thuốc
                 </button>

@@ -371,15 +371,37 @@ router.get('/today/patients', loadDoctor, async (req, res, next) => {
     const appts = await LichKham.find({ bacSiId: req.doctor._id, ngayKham: { $gte: start, $lt: end } })
       .populate('benhNhanId', 'hoTen soDienThoai ngaySinh gioiTinh')
       .lean();
+
+    // Lấy hồ sơ khám liên kết với các lịch hẹn trong ngày
+    const apptIds = appts.map(a => a._id);
+    const cases = await HoSoKham.find({ lichKhamId: { $in: apptIds } })
+      .select('_id lichKhamId trangThai')
+      .lean();
+    const lkToCase = cases.reduce((m,c)=>{ m[String(c.lichKhamId)] = c; return m; }, {});
+
+    // Kiểm tra đơn thuốc đã được tạo cho các hồ sơ
+    const caseIds = cases.map(c => c._id);
+    const dons = caseIds.length ? await DonThuoc.find({ hoSoKhamId: { $in: caseIds } })
+      .select('hoSoKhamId')
+      .lean() : [];
+    const rxSet = new Set(dons.map(d => String(d.hoSoKhamId)));
     const stts = await SoThuTu.find({ lichKhamId: { $in: appts.map(a=>a._id) } }).select('lichKhamId soThuTu trangThai').lean();
     const sttMap = stts.reduce((m,s)=>{ m[String(s.lichKhamId)] = s; return m; },{});
-    const items = appts.map(a=>({
-      _id: a._id,
-      benhNhan: a.benhNhanId,
-      khungGio: a.khungGio,
-      trangThai: a.trangThai,
-      soThuTu: sttMap[String(a._id)]?.soThuTu || null,
-    }));
+    const items = appts.map(a=>{
+      const caseDoc = lkToCase[String(a._id)];
+      const hasPrescription = caseDoc ? rxSet.has(String(caseDoc._id)) : false;
+      // Nếu đã có đơn thuốc hoặc trạng thái lịch/hồ sơ đã hoàn tất => hiển thị Khám xong
+      const finalStatus = (a.trangThai === 'hoan_tat' || a.trangThai === 'da_kham' || caseDoc?.trangThai === 'hoan_tat' || hasPrescription)
+        ? 'hoan_tat'
+        : a.trangThai;
+      return {
+        _id: a._id,
+        benhNhan: a.benhNhanId,
+        khungGio: a.khungGio,
+        trangThai: finalStatus,
+        soThuTu: sttMap[String(a._id)]?.soThuTu || null,
+      };
+    });
     // sort by soThuTu then khungGio
     items.sort((x,y)=>{
       const sx = x.soThuTu ?? 1e9; const sy = y.soThuTu ?? 1e9;
@@ -572,7 +594,36 @@ router.post('/cases/:id/prescriptions', loadDoctor, async (req, res, next) => {
       }));
     if(!normalized.length) return res.status(400).json({ message: 'Danh sách thuốc không hợp lệ' });
     const doc = await DonThuoc.create({ hoSoKhamId: hs._id, items: normalized });
-    return res.status(201).json(doc);
+
+    // Sau khi kê đơn: đánh dấu hồ sơ & lịch khám đã hoàn tất để UI "Gọi bệnh nhân" hiển thị "Khám xong"
+    try {
+      // Cập nhật trạng thái hồ sơ khám
+      hs.trangThai = 'hoan_tat';
+      hs.ketThucLuc = new Date();
+      await hs.save();
+
+      // Cập nhật lịch khám liên quan (nếu có)
+      if (hs.lichKhamId) {
+        const lk = await LichKham.findById(hs.lichKhamId);
+        if (lk) {
+          lk.trangThai = 'hoan_tat';
+          await lk.save();
+          // Cập nhật số thứ tự sang trạng thái hoàn tất
+          await SoThuTu.updateOne(
+            { lichKhamId: lk._id },
+            { trangThai: 'hoan_tat' }
+          );
+        }
+      }
+    } catch (statusErr) {
+      // Không chặn phản hồi kê đơn nếu lỗi cập nhật trạng thái; chỉ log để theo dõi
+      console.warn('[PRESCRIPTIONS] Lỗi cập nhật trạng thái sau kê đơn:', statusErr);
+    }
+
+    // Trả về đơn thuốc kèm hồ sơ vừa cập nhật để frontend cập nhật ngay
+    const populatedCase = await HoSoKham.findById(hs._id)
+      .populate('benhNhanId','hoTen soDienThoai ngaySinh gioiTinh');
+    return res.status(201).json({ prescription: doc, case: populatedCase });
   } catch(err){ return next(err); }
 });
 
