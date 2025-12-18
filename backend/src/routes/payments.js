@@ -1,6 +1,34 @@
 // Router thanh toán (MoMo, tiền mặt) và tiện ích liên quan
 const express = require('express');
 const router = express.Router();
+
+// ===== Tóm tắt API Thanh toán (payments) =====
+// Quyền hạn tổng quan:
+// - Phần lớn API yêu cầu đăng nhập + quyền 'reception' | 'pharmacy' | 'admin'.
+// - Một số callback từ MoMo là public (notify, return-get/return GET).
+//
+// Truy vấn & tiện ích
+// - GET    /api/payments/:id                 : Lấy thông tin thanh toán theo id (ObjectId-24hex) [reception|pharmacy|admin]
+// - GET    /api/payments/services            : Danh sách dịch vụ cho UI thu phí (filter q) [reception|admin]
+//
+// MoMo Payments
+// - POST   /api/payments/momo/create         : Tạo giao dịch MoMo cho một hồ sơ (amount, return/notify URL, orderRefs, targetType) [reception|pharmacy|admin]
+// - POST   /api/payments/momo/notify         : Webhook từ MoMo (public); xác minh signature (best-effort), cập nhật trạng thái và thực thể liên quan
+// - POST   /api/payments/momo/return         : Endpoint nhận POST redirect; xác minh signature, cập nhật thanh toán, cập nhật thực thể
+// - GET    /api/payments/momo/return-get     : Redirect GET -> chuyển hướng về FRONTEND_RETURN_URL với status
+// - GET    /api/payments/momo/return         : Hỗ trợ GET return; xác minh/ghi nhận kết quả và cập nhật thực thể liên quan
+//
+// Tiền mặt (Cash)
+// - POST   /api/payments/cash/create         : Tạo thanh toán tiền mặt cho hồ sơ (targetType: canlamsang|donthuoc|hosokham) [reception|pharmacy|admin]
+//
+// Thanh toán đơn thuốc (Prescription)
+// - POST   /api/payments/prescription/:id/momo : Tạo giao dịch MoMo cho đơn thuốc id [pharmacy|reception|admin]
+// - POST   /api/payments/prescription/:id/cash : Thanh toán tiền mặt cho đơn thuốc id [pharmacy|reception|admin]
+//
+// Hỗ trợ thu phí CLS tại lễ tân
+// - GET    /api/payments/canlamsang          : Liệt kê chỉ định CLS chưa thanh toán của một hồ sơ [reception|admin]
+// - GET    /api/payments/unpaid-cases        : Tổng hợp hồ sơ có CLS chưa thanh toán (gom nhóm) [reception|admin]
+
 const { v4: uuidv4 } = require('uuid');
 const auth = require('../middlewares/auth');
 const authorize = require('../middlewares/authorize');

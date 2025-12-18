@@ -777,7 +777,7 @@ router.get('/doctor-available-days', async (req, res, next) => { // Ngày bác s
     if(!bs.userId) return res.status(400).json({ message: 'Bác sĩ chưa liên kết tài khoản User' });
 
     // Fetch schedules in the month for this doctor (by userId)
-    const scheds = await WorkSchedule.find({ // Lấy tất cả ca làm việc trong tháng
+    const scheds = await WorkSchedule.find({ // Lấy tất cả ca làm. việc trong tháng
       userId: bs.userId,
       role: 'doctor',
       day: { $gte: range.start, $lt: range.end }

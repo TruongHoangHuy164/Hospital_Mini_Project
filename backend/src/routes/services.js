@@ -3,6 +3,15 @@ const DichVu = require('../models/DichVu');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Dịch vụ (services) =====
+// Quyền hạn: tạo/sửa/xóa chỉ dành cho người dùng 'admin'.
+//
+// - GET    /api/services              : Danh sách dịch vụ; hỗ trợ tìm theo tên (q) và lọc theo chuyenKhoaId
+// - POST   /api/services              : Tạo dịch vụ mới (admin)
+// - PUT    /api/services/:id          : Cập nhật dịch vụ (admin)
+// - DELETE /api/services/:id          : Xóa dịch vụ (admin)
+// Ghi chú: Mỗi dịch vụ có thể gắn chuyenKhoaId và tùy chọn trường 'gia'.
+
 // ===== Quản lý Dịch vụ (DichVu) =====
 // Lưu ý quyền: tạo/sửa/xóa chỉ dành cho người dùng `admin`.
 // Mỗi dịch vụ có thể gắn với một chuyên khoa (`chuyenKhoaId`) và có trường `gia` (tùy chọn).

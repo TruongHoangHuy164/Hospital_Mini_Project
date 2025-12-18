@@ -3,6 +3,15 @@ const ChuyenKhoa = require('../models/ChuyenKhoa');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Chuyên khoa (specialties) =====
+// Quyền hạn: tạo/sửa/xóa chỉ dành cho người dùng 'admin'.
+// Hỗ trợ tìm kiếm theo tên (q) và phân trang (page, limit).
+//
+// - GET    /api/specialties           : Danh sách chuyên khoa (search q, pagination page/limit)
+// - POST   /api/specialties           : Tạo chuyên khoa (admin)
+// - PUT    /api/specialties/:id       : Cập nhật chuyên khoa (admin)
+// - DELETE /api/specialties/:id       : Xóa chuyên khoa (admin)
+
 // ===== Quản lý Chuyên khoa (ChuyenKhoa) =====
 // Lưu ý quyền: tạo/sửa/xóa chỉ dành cho người dùng `admin`.
 // Các API hỗ trợ tìm kiếm (`q`) và phân trang (`page`, `limit`).

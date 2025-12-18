@@ -8,6 +8,14 @@ const multer = require('multer');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Phòng Xét Nghiệm (lab) =====
+// - GET   /api/lab/orders                  : Liệt kê chỉ định CLS theo trạng thái, tìm kiếm, lọc theo ngày; mặc định chỉ hiển thị đã thanh toán
+// - POST  /api/lab/orders/:id/start        : Nhận xử lý/bắt đầu chỉ định (đặt 'dang_thuc_hien')
+// - PATCH /api/lab/orders/:id/start        : Bắt đầu chỉ định (tương tự POST)
+// - POST  /api/lab/orders/:id/complete     : Gửi kết quả dạng text và hoàn thành chỉ định (đặt 'da_xong')
+// - PATCH /api/lab/orders/:id/result       : Gửi kết quả (bắt buộc có 'ketQua'), tùy chọn upload file (PDF/JPG/PNG/DOC/DOCX); đặt 'da_xong'
+// - GET   /api/lab/stats                   : Thống kê tổng quan theo ngày: { paid, pending, done, ready }
+
 // ===== Phòng xét nghiệm (Lab) =====
 // Quản lý các chỉ định cận lâm sàng (CanLamSang) và kết quả.
 // Lưu ý: Mặc định chỉ hiển thị các chỉ định đã thanh toán (`daThanhToan = true`).

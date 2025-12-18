@@ -1,3 +1,27 @@
+/*
+TÓM TẮT API — Chat support
+- Mục tiêu: Tra cứu lịch sử tin nhắn theo phòng và liệt kê các phòng đang hoạt động.
+- Quyền:
+  - `GET /history`: yêu cầu đăng nhập (`auth`). Role `user` chỉ xem phòng của chính mình (room:benhNhan:<id> khớp user hiện tại). `reception`/`admin` không bị giới hạn theo phòng.
+  - `GET /rooms`: yêu cầu đăng nhập + phân quyền `reception` hoặc `admin`.
+- Mô hình/phụ thuộc: `ChatMessage`, `BenhNhan`, `Staff`, `User`.
+
+Endpoints chính:
+1) GET /api/chat/history?roomId=...&page=1&limit=50
+  - Bắt buộc `roomId`. Phân trang: page>=1, limit 1..200 (mặc định 50).
+  - Trả về tin nhắn theo `roomId`, sắp xếp mới→cũ, kèm `senderName` đã suy diễn theo vai trò.
+  - Kiểm soát truy cập: role `user` chỉ được xem phòng dạng `room:benhNhan:<benhNhanId>` thuộc `userId` của mình.
+  - Kết quả: { items[], total, page, limit, totalPages } — items được đảo lại theo thời gian cũ→mới để hiển thị thuận mắt.
+
+2) GET /api/chat/rooms?q=&page=1&limit=20
+  - Gom phòng theo `roomId`, lấy tin nhắn cuối cùng (lastMessage) và tổng số tin nhắn (count) qua aggregation.
+  - Bổ sung `patient` khi phòng có dạng `room:benhNhan:<id>` (lấy họ tên/số ĐT). Lọc đơn giản bởi `q` theo tên, số điện thoại, hoặc roomId.
+  - Phân trang: page>=1, limit 1..100 (mặc định 20). Trả về: { items[{ roomId, lastMessage, count, patient }], page, limit }.
+
+Ghi chú:
+- Bảo mật: tránh lộ phòng của bệnh nhân khác cho role `user`. Các vai trò nội bộ (`reception`, `admin`) có quyền xem danh mục phòng.
+- Tối ưu: cân nhắc index `ChatMessage(roomId, createdAt)` để tăng tốc truy vấn lịch sử và gom phòng.
+*/
 const express = require('express');
 const auth = require('../middlewares/auth');
 const authorize = require('../middlewares/authorize');

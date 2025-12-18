@@ -1,3 +1,31 @@
+/*
+TÓM TẮT API — Phòng khám (Clinics)
+- Mục tiêu: CRUD danh mục phòng khám; hỗ trợ tìm kiếm và phân trang.
+- Quyền: Router này không gắn `auth/authorize` trực tiếp; tuỳ quyền được áp ở router cha.
+- Mô hình: `PhongKham` (có trường liên kết `chuyenKhoaId`).
+
+Endpoints chính:
+1) GET /api/clinics?q=&chuyenKhoaId=&page=1&limit=50
+  - Tìm kiếm theo tên phòng (`tenPhong`) hoặc chuyên khoa dạng text (`chuyenKhoa`, regex i).
+  - Lọc theo `chuyenKhoaId` khi có; sắp xếp theo `tenPhong` tăng dần.
+  - Phân trang: `page>=1`, `limit` 1..200 (mặc định 50).
+  - Trả về: { items (populate `chuyenKhoaId.ten`), total, page, limit, totalPages }.
+
+2) POST /api/clinics
+  - Body: { tenPhong (bắt buộc), chuyenKhoa (bắt buộc), chuyenKhoaId? }.
+  - 400 nếu thiếu tên phòng/chuyên khoa. Trả về bản ghi đã tạo (201).
+
+3) PUT /api/clinics/:id
+  - Body: { tenPhong?, chuyenKhoa?, chuyenKhoaId? }.
+  - Cập nhật các trường cung cấp; `chuyenKhoaId` có thể bỏ trống để xoá liên kết.
+  - 404 nếu không tìm thấy.
+
+4) DELETE /api/clinics/:id
+  - Xoá phòng khám theo id; 404 nếu không tìm thấy.
+
+Ghi chú:
+- Khuyến nghị index: `PhongKham(tenPhong)`, `PhongKham(chuyenKhoaId)` để tối ưu lọc/sắp xếp.
+*/
 // Router quản lý phòng khám (Clinics)
 const express = require('express');
 const PhongKham = require('../models/PhongKham');

@@ -1,10 +1,14 @@
 // Router xác thực và khôi phục mật khẩu
-const express = require('express');
-const jwt = require('jsonwebtoken');
-const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
+// Mô tả tổng quan:
+// - Cung cấp các endpoint đăng ký, đăng nhập, làm mới token, đăng xuất
+// - Hỗ trợ quên mật khẩu bằng OTP qua email/SMS và đặt lại mật khẩu
+// - Sử dụng JWT cho access token (chứa thông tin cơ bản) và refresh token (ít thông tin, có tid để thu hồi/rotate)
+const express = require('express'); // Express Router để định nghĩa các endpoint HTTP
+const jwt = require('jsonwebtoken'); // Thư viện JWT để ký/xác minh token
+const crypto = require('crypto'); // Dùng tạo tid và hash OTP
+const bcrypt = require('bcryptjs'); // Bcrypt (có thể dùng trong model User)
 // Model người dùng
-const User = require('../models/User');
+const User = require('../models/User'); // Mongoose Model người dùng
 
 // Helpers
 // Tạo tokenId ngẫu nhiên để gắn vào refresh token (phục vụ thu hồi/rotate)
@@ -22,9 +26,11 @@ function getJwtSecrets() {
   return { accessSecret, refreshSecret };
 }
 
-const router = express.Router();
+const router = express.Router(); // Khởi tạo router
 
 // Ký access token chứa thông tin cơ bản của user
+// Payload: { id, email, phone, name, role }
+// expiresIn: mặc định 7 ngày (cấu hình qua ENV JWT_EXPIRES_IN)
 function signAccessToken(user) {
   const payload = { id: user._id, email: user.email, phone: user.phone, name: user.name, role: user.role };
   const { accessSecret: secret } = getJwtSecrets();
@@ -33,6 +39,7 @@ function signAccessToken(user) {
 }
 
 // Ký refresh token (ít thông tin), chứa sub (userId) và tid (tokenId)
+// Mục đích: kéo dài phiên đăng nhập; có thể rotate và thu hồi theo tid
 function signRefreshToken(user, tokenId) {
   const payload = { sub: user._id.toString(), tid: tokenId };
   const { refreshSecret: secret } = getJwtSecrets();
@@ -41,7 +48,10 @@ function signRefreshToken(user, tokenId) {
 }
 
 // POST /api/auth/register
-// Mô tả: Đăng ký tài khoản mới bằng name, password và (email hoặc phone). Trả về access/refresh token.
+// Mô tả:
+// - Đăng ký tài khoản mới bằng name, password và (email hoặc phone)
+// - Chuẩn hoá số điện thoại, kiểm tra trùng email/phone
+// - Lưu user, tạo tid, đẩy vào danh sách refreshTokenIds, trả về access/refresh token
 router.post('/register', async (req, res, next) => {
   try {
     const { name, email, phone, password } = req.body || {};
@@ -63,7 +73,7 @@ router.post('/register', async (req, res, next) => {
     }
 
     const user = await User.create({ name, email: email ? String(email).toLowerCase().trim() : undefined, phone: phoneNorm || undefined, password });
-    const tokenId = newTokenId();
+    const tokenId = newTokenId(); // Tạo tid mới cho refresh token
     user.refreshTokenIds.push(tokenId);
     await user.save();
     const accessToken = signAccessToken(user);
@@ -79,7 +89,10 @@ router.post('/register', async (req, res, next) => {
 });
 
 // POST /api/auth/login
-// Mô tả: Đăng nhập bằng email/phone/identifier + password. Kiểm tra khóa tài khoản, trả về access/refresh token.
+// Mô tả:
+// - Đăng nhập bằng email/phone/identifier + password
+// - Kiểm tra khoá tài khoản, trả về access/refresh token
+// - Chuẩn hoá input, tìm user theo ưu tiên: email -> phone -> identifier
 router.post('/login', async (req, res, next) => {
   try {
     const { email, phone, identifier, password } = req.body || {};
@@ -110,12 +123,12 @@ router.post('/login', async (req, res, next) => {
       return res.status(403).json({ message: 'Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.' });
     }
 
-    const ok = await user.comparePassword(password);
+    const ok = await user.comparePassword(password); // So sánh mật khẩu bằng bcrypt (trong model User)
     if (!ok) {
       return res.status(401).json({ message: 'Sai thông tin đăng nhập hoặc password' });
     }
 
-    const tokenId = newTokenId();
+    const tokenId = newTokenId(); // Tạo tid mới và lưu vào user để phép refresh
     user.refreshTokenIds.push(tokenId);
     await user.save();
     const accessToken = signAccessToken(user);
@@ -131,7 +144,10 @@ router.post('/login', async (req, res, next) => {
 });
 
 // POST /api/auth/refresh
-// Mô tả: Làm mới access token bằng refresh token (verify + rotate tid).
+// Mô tả:
+// - Làm mới access token bằng refresh token
+// - Xác minh refresh token, kiểm tra tid có nằm trong danh sách hợp lệ
+// - Rotate: loại tid cũ, thêm tid mới, ký lại refresh token
 router.post('/refresh', async (req, res, next) => {
   try {
     const { refreshToken } = req.body || {};
@@ -143,14 +159,14 @@ router.post('/refresh', async (req, res, next) => {
     } catch {
       return res.status(401).json({ message: 'Refresh token không hợp lệ' });
     }
-  const user = await User.findById(payload.sub);
+  const user = await User.findById(payload.sub); // Lấy user theo sub
     if (!user) return res.status(401).json({ message: 'User không tồn tại' });
   if (user.isLocked) return res.status(403).json({ message: 'Tài khoản đã bị khóa' });
     const valid = user.refreshTokenIds.includes(payload.tid);
     if (!valid) return res.status(401).json({ message: 'Refresh token đã thu hồi' });
 
     // Rotate
-    const newTid = newTokenId();
+    const newTid = newTokenId(); // Tạo tid mới
     user.refreshTokenIds = user.refreshTokenIds.filter((id) => id !== payload.tid);
     user.refreshTokenIds.push(newTid);
     await user.save();
@@ -164,7 +180,9 @@ router.post('/refresh', async (req, res, next) => {
 });
 
 // POST /api/auth/logout
-// Mô tả: Thu hồi refresh token hiện tại (nếu hợp lệ) và trả về trạng thái đăng xuất.
+// Mô tả:
+// - Thu hồi refresh token hiện tại (nếu hợp lệ) và trả về trạng thái đăng xuất
+// - Nếu refreshToken invalid thì vẫn trả success để đơn giản hoá
 router.post('/logout', async (req, res, next) => {
   try {
     const { refreshToken } = req.body || {};
@@ -196,7 +214,9 @@ function generateOTP(length = 6) {
 const { sendEmailOTP, sendSmsOTP } = require('../services/otpSender');
 
 // POST /api/auth/forgot-password  { identifier }
-// Mô tả: Nhận email hoặc số điện thoại; nếu tài khoản tồn tại thì gửi OTP 6 số qua email/SMS.
+// Mô tả:
+// - Nhận email hoặc số điện thoại; nếu tài khoản tồn tại thì gửi OTP 6 số qua email/SMS
+// - Tránh lộ thông tin người dùng: luôn trả về thành công dù không tìm thấy tài khoản
 router.post('/forgot-password', async (req, res, next) => {
   try {
     const { identifier } = req.body || {};
@@ -218,7 +238,7 @@ router.post('/forgot-password', async (req, res, next) => {
       return res.json({ message: 'Nếu tài khoản tồn tại, OTP đã được gửi' });
     }
 
-    const otp = generateOTP(6);
+    const otp = generateOTP(6); // Sinh OTP 6 số
     const hashed = crypto.createHash('sha256').update(otp).digest('hex');
     user.resetPasswordToken = hashed;
     user.resetPasswordExpires = new Date(Date.now() + 1000 * 60 * 5); // 5 phút
@@ -237,7 +257,9 @@ router.post('/forgot-password', async (req, res, next) => {
 });
 
 // POST /api/auth/reset-password { identifier, otp, password }
-// Mô tả: Xác thực OTP đã gửi và đặt lại mật khẩu mới; tránh double-hash bằng cách để pre-save hook xử lý.
+// Mô tả:
+// - Xác thực OTP đã gửi và đặt lại mật khẩu mới
+// - Tránh double-hash: để pre-save hook của model User xử lý bcrypt hashing
 router.post('/reset-password', async (req, res, next) => {
   try {
     const { identifier, otp, password } = req.body || {};
@@ -257,14 +279,14 @@ router.post('/reset-password', async (req, res, next) => {
     if (!user.resetPasswordToken || !user.resetPasswordExpires || user.resetPasswordExpires < new Date()) {
       return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
     }
-    const hashedInput = crypto.createHash('sha256').update(String(otp)).digest('hex');
+    const hashedInput = crypto.createHash('sha256').update(String(otp)).digest('hex'); // Hash OTP nhập vào để so với DB
     if (hashedInput !== user.resetPasswordToken) {
       return res.status(400).json({ message: 'OTP không hợp lệ hoặc đã hết hạn' });
     }
 
     // Ghi trực tiếp mật khẩu mới (plaintext) để pre-save hook tự hash.
     // Tránh double-hash (đã từng hash thủ công rồi bị hook hash lần nữa làm sai mật khẩu).
-    user.password = password;
+    user.password = password; // Gán plaintext để hook pre-save tự hash
     user.resetPasswordToken = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();

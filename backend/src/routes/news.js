@@ -1,3 +1,21 @@
+/*
+TÓM TẮT API — Tin tức (News)
+- Mục tiêu: Công bố bài viết đã xuất bản cho người dùng; xem chi tiết theo slug.
+- Quyền: Public (không yêu cầu đăng nhập) vì chỉ trả bài đã `isPublished=true`.
+- Mô hình: `Post` với các trường chính: title, slug, coverImage, tags, publishedAt, isPublished.
+
+Endpoints chính:
+1) GET /api/news?q? (không dùng) & tag? & page=1 & limit=10
+  - Liệt kê bài đã xuất bản, lọc theo `tag` nếu có.
+  - Sắp xếp: `publishedAt` giảm dần. Chỉ select các trường: title, slug, coverImage, tags, publishedAt.
+  - Phân trang: `page>=1`, `limit` số dương. Trả về: { items, total, page, limit }.
+
+2) GET /api/news/:slug
+  - Lấy chi tiết 1 bài viết đã xuất bản theo `slug`; 404 nếu không tồn tại.
+
+Ghi chú:
+- Khuyến nghị index: Post(isPublished, publishedAt), Post(slug), Post(tags).
+*/
 const express = require('express');
 const Post = require('../models/Post');
 const router = express.Router();

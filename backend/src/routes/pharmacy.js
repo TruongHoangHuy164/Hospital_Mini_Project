@@ -12,6 +12,30 @@ const LoaiThuoc = require('../models/LoaiThuoc');
 router.use(auth);
 router.use(authorize('pharmacy', 'admin'));
 
+// ===== Tóm tắt API Hiệu thuốc (pharmacy) =====
+// Quyền hạn: tất cả endpoint yêu cầu đăng nhập và role 'pharmacy' hoặc 'admin'.
+//
+// Đơn thuốc (workflow)
+// - GET    /api/pharmacy/orders                  : Liệt kê đơn theo trạng thái (WAITING_FOR_MEDICINE|PAID|PREPARING|COMPLETED) và theo ngày; kèm tổng tiền
+// - GET    /api/pharmacy/stats                   : Thống kê số lượng theo trạng thái trong ngày: waiting|paid|preparing|completed
+// - PATCH  /api/pharmacy/orders/:id/pay          : Xác nhận thanh toán (issued -> pending_pharmacy)
+// - PATCH  /api/pharmacy/orders/:id/prepare      : Bắt đầu chuẩn bị thuốc (pending_pharmacy -> dispensing)
+// - PATCH  /api/pharmacy/orders/:id/dispense     : Phát thuốc/hoàn tất (dispensing -> dispensed), lưu người/phút phát thuốc
+//
+// Quản lý kho (inventory)
+// - GET    /api/pharmacy/inventory               : Liệt kê kho (phân trang, tìm kiếm, sắp xếp, lọc theo danh mục)
+// - POST   /api/pharmacy/inventory               : Tạo mục kho mới
+// - PUT    /api/pharmacy/inventory/:id           : Cập nhật mục kho
+// - DELETE /api/pharmacy/inventory/:id           : Xoá mục kho
+// - POST   /api/pharmacy/inventory/import        : Import danh sách JSON (tùy chọn gán categoryId cho tất cả)
+//
+// Danh mục thuốc (categories)
+// - GET    /api/pharmacy/categories              : Liệt kê danh mục + số lượng thuốc mỗi danh mục
+// - POST   /api/pharmacy/categories              : Tạo danh mục thuốc
+// - PUT    /api/pharmacy/categories/:id          : Cập nhật danh mục
+// - DELETE /api/pharmacy/categories/:id          : Xoá danh mục (chặn nếu còn thuốc thuộc danh mục)
+// - POST   /api/pharmacy/categories/:id/import   : Import vào danh mục cụ thể (ủy quyền sang /inventory/import)
+
 // Lấy đơn thuốc theo trạng thái
 // GET /api/pharmacy/orders?status=WAITING_FOR_MEDICINE|PAID|PREPARING|COMPLETED&day=YYYY-MM-DD
 router.get('/orders', async (req, res) => {

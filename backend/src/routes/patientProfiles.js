@@ -6,6 +6,14 @@ const asyncHandler = require('express-async-handler');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Hồ sơ Người thân (patient-profiles) =====
+// - GET    /api/patient-profiles            : Lấy tất cả hồ sơ người thân của người dùng đang đăng nhập
+// - POST   /api/patient-profiles            : Tạo hồ sơ người thân mới (chuẩn hoá số điện thoại, kiểm tra trùng)
+// - GET    /api/patient-profiles/:id        : Lấy chi tiết hồ sơ (chỉ khi thuộc về người dùng hiện tại)
+// - PUT    /api/patient-profiles/:id        : Cập nhật hồ sơ (chuẩn hoá/kiểm tra trùng số điện thoại nếu đổi)
+// - DELETE /api/patient-profiles/:id        : Xoá hồ sơ (chỉ khi thuộc về người dùng hiện tại)
+// Ghi chú: Tất cả các route đều yêu cầu xác thực (auth middleware)
+
 // Chuẩn hoá số điện thoại (cơ bản: bỏ khoảng trắng, giữ số và dấu + đầu)
 function normalizePhone(raw){
   if(!raw) return '';

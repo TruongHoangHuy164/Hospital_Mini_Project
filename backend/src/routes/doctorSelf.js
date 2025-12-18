@@ -12,6 +12,54 @@ const CanLamSang = require('../models/CanLamSang');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Bác sĩ (doctorSelf) =====
+// Nhóm Hồ sơ cá nhân
+// - GET   /api/doctor/me                      : Lấy hồ sơ bác sĩ đang đăng nhập
+// - PUT   /api/doctor/me                      : Cập nhật thông tin cá nhân cho bác sĩ
+//
+// Nhóm Bệnh nhân
+// - GET   /api/doctor/patients                : Tìm kiếm bệnh nhân theo tên/số điện thoại (phân trang)
+// - POST  /api/doctor/patients                : Tạo nhanh bệnh nhân mới
+// - GET   /api/doctor/patients/:id/cases      : Lịch sử khám của bệnh nhân với bác sĩ hiện tại (phân trang)
+// - GET   /api/doctor/patients/:id/history    : Lịch sử khám của bệnh nhân (tất cả bác sĩ, có enrich chỉ định/đơn)
+// - GET   /api/doctor/patients/:id/history-full: Tổng hợp cases + labs + prescriptions (giới hạn gần đây)
+//
+// Nhóm Hồ sơ khám (Case)
+// - GET   /api/doctor/cases                   : Danh sách hồ sơ khám của bác sĩ (lọc theo ngày tuỳ chọn)
+// - POST  /api/doctor/cases                   : Tạo hồ sơ khám thủ công
+// - GET   /api/doctor/cases/:id               : Lấy chi tiết 1 hồ sơ khám
+// - PUT   /api/doctor/cases/:id               : Cập nhật lâm sàng/triệu chứng/hướng điều trị...
+// - POST  /api/doctor/cases/:id/complete      : Kết thúc ca (đặt trạng thái hoan_tat, cập nhật lịch/SốTT)
+//
+// Nhóm Đơn thuốc
+// - POST  /api/doctor/cases/:id/prescriptions : Tạo đơn thuốc cho hồ sơ (kê từ kho ThuocKho)
+// - GET   /api/doctor/cases/:id/prescriptions : Danh sách đơn thuốc của hồ sơ
+// - GET   /api/doctor/medicines               : Tìm thuốc (từ kho), hỗ trợ nhóm/giá/sort
+// - GET   /api/doctor/medicine-groups         : Nhóm thuốc + số lượng theo danh mục
+//
+// Nhóm Chỉ định cận lâm sàng
+// - POST  /api/doctor/cases/:id/labs          : Tạo chỉ định CLS cho hồ sơ (chuyển trạng thái chờ kết quả)
+// - GET   /api/doctor/cases/:id/labs          : Danh sách chỉ định của hồ sơ
+// - PUT   /api/doctor/labs/:id/note           : Cập nhật ghi chú chỉ định (khi chưa hoàn tất)
+// - DELETE/api/doctor/labs/:id                : Xoá chỉ định (chỉ khi trạng thái chờ thực hiện)
+//
+// Nhóm Lịch làm việc
+// - GET   /api/doctor/schedule                : Lấy lịch làm việc trong khoảng ngày
+// - POST  /api/doctor/schedule                : Tạo lịch làm việc (ngày/ca)
+// - PUT   /api/doctor/schedule/:id            : Cập nhật lịch làm việc
+// - DELETE/api/doctor/schedule/:id            : Xoá lịch làm việc
+//
+// Nhóm Hàng đợi & lịch hẹn trong ngày
+// - GET   /api/doctor/today/patients          : Danh sách bệnh nhân trong ngày (kèm STT, trạng thái)
+// - GET   /api/doctor/today/stats             : Thống kê nhanh trong ngày (chỉ định pending, số đơn thuốc)
+// - POST  /api/doctor/appointments/:id/intake : Tiếp nhận bệnh nhân theo lịch (tạo case + chuyển STT đã gọi)
+// - POST  /api/doctor/appointments/:id/skip   : Bỏ qua bệnh nhân (đặt STT bo_qua)
+// - POST  /api/doctor/appointments/:id/notify : Gửi thông báo mời vào (mô phỏng; chuyển STT đã gọi nếu đang chờ)
+// - POST  /api/doctor/queue/next              : Gọi bệnh nhân tiếp theo trong ngày
+//
+// Nhóm Trạng thái làm việc
+// - PUT   /api/doctor/work-status             : Cập nhật trạng thái làm việc hiện tại của bác sĩ
+
 // Helper middleware: load doctor by req.user.id and attach to req.doctor
 async function loadDoctor(req, res, next){
   try{

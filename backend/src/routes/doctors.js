@@ -10,6 +10,14 @@ const User = require('../models/User');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Quản lý Bác sĩ (doctors) =====
+// - GET    /api/doctors                         : Liệt kê bác sĩ (phân trang, tìm kiếm q, lọc chuyên khoa/phòng khám)
+// - POST   /api/doctors                         : Tạo mới bác sĩ
+// - GET    /api/doctors/:id                     : Lấy thông tin chi tiết 1 bác sĩ
+// - PUT    /api/doctors/:id                     : Cập nhật thông tin bác sĩ
+// - DELETE /api/doctors/:id                     : Xoá bác sĩ
+// - POST   /api/doctors/:id/provision-account   : Cấp tài khoản người dùng (role=doctor) dựa trên email bác sĩ
+
 // Liệt kê bác sĩ với phân trang/tìm kiếm/lọc
 // GET /api/doctors?page=1&limit=10&q=&chuyenKhoa=&phongKhamId=
 router.get('/', async (req, res, next) => {

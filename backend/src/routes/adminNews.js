@@ -1,3 +1,31 @@
+/*
+TÓM TẮT API — Quản trị tin tức (Admin News)
+- Mục tiêu: Quản lý bài viết (Post) cho khu vực quản trị: liệt kê, tạo, sửa, xóa.
+- Quyền: Tất cả endpoints yêu cầu đăng nhập (`auth`) và phân quyền `admin`.
+- Mô hình: `Post` với các trường: title, slug, content, coverImage, tags, author, isPublished, publishedAt.
+
+Endpoints chính:
+1) GET /api/admin/news
+  - Liệt kê toàn bộ bài (mọi trạng thái), sắp xếp `createdAt` giảm dần.
+  - Trả về: { items: Post[] }.
+
+2) POST /api/admin/news
+  - Tạo bài: body { title, slug, content, coverImage?, tags?, isPublished? }.
+  - `author` lấy từ `req.user._id`. Nếu `isPublished=true` thì set `publishedAt=now`.
+  - Trả về 201 cùng bản ghi mới.
+
+3) PUT /api/admin/news/:id
+  - Cập nhật các trường { title, slug, content, coverImage, tags, isPublished }.
+  - Nếu `isPublished` là boolean: `true` -> set `publishedAt=now`, `false` -> `publishedAt=undefined`.
+  - 404 nếu không tìm thấy.
+
+4) DELETE /api/admin/news/:id
+  - Xóa bài viết theo id; 404 nếu không tìm thấy.
+
+Ghi chú:
+- Khuyến nghị index: Post(slug) unique, Post(createdAt), Post(isPublished,publishedAt).
+- Kiểm tra trùng `slug` phía DB hoặc trước khi tạo/cập nhật để tránh xung đột.
+*/
 const express = require('express');
 const Post = require('../models/Post');
 const auth = require('../middlewares/auth');

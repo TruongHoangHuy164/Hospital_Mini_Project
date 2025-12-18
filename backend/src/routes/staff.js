@@ -5,6 +5,17 @@ const User = require('../models/User');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Nhân viên (staff) =====
+// Ghi chú: Vai trò hỗ trợ gồm reception, lab, cashier, nurse, pharmacy.
+// Quyền hạn thực tế phụ thuộc middleware cấp cao (file này chưa chặn theo role).
+//
+// - GET    /api/staff                      : Danh sách nhân viên (lọc theo vaiTro, q, phongKhamId; phân trang)
+// - POST   /api/staff                      : Tạo nhân viên mới (yêu cầu hoTen, vaiTro; kiểm tra phongKhamId nếu có)
+// - GET    /api/staff/:id                  : Lấy chi tiết 1 nhân viên
+// - PUT    /api/staff/:id                  : Cập nhật thông tin nhân viên
+// - DELETE /api/staff/:id                  : Xoá nhân viên
+// - POST   /api/staff/:id/provision-account: Cấp tài khoản User từ email nhân viên (mật khẩu mặc định 123456; role theo vaiTro)
+
 // ===== Quản lý Nhân viên (Staff) =====
 // Các vai trò hỗ trợ: reception, lab, cashier, nurse, pharmacy.
 // API liệt kê hỗ trợ lọc theo `vaiTro`, `q` (họ tên), `phongKhamId` và phân trang.

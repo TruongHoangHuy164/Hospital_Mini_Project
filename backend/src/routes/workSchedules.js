@@ -1,3 +1,56 @@
+/*
+TÓM TẮT API — Lịch làm việc (Work Schedules)
+- Mục tiêu: Quản lý lịch làm việc theo ngày/ca, tập trung cho tháng kế tiếp.
+- Quy tắc tháng:
+  - Mặc định: chỉ thao tác tháng kế tiếp.
+  - Admin: được phép tháng hiện tại và tháng kế tiếp.
+  - Cửa sổ đăng ký: bị chặn trước `openFrom` (cấu hình qua `/config/next`).
+- Vai trò hợp lệ: doctor, reception, lab, cashier, nurse. Ca: sang | chieu | toi. Loại ca: lam_viec | truc | nghi.
+
+Endpoints chính:
+1) GET /api/work-schedules?month=YYYY-MM[&role=&userId=]
+  - Trả danh sách lịch theo tháng (bắt buộc `month`), lọc theo `role`/`userId` nếu có.
+
+2) POST /api/work-schedules
+  - Tạo 1 lịch: body { userId, role, day(YYYY-MM-DD), shift, shiftType='lam_viec', clinicId?, reason?, note?, meta? }.
+  - Quyền: admin tạo cho bất kỳ ai; reception chỉ tạo cho bác sĩ; người thường chỉ tạo cho chính mình.
+  - Ràng buộc tháng theo quy tắc trên và kiểm tra `openFrom`.
+
+3) PUT /api/work-schedules/:id
+  - Cập nhật các trường cho phép: shift, shiftType, clinicId, reason, note, meta, day.
+  - Không admin không được sửa lịch của người khác. Kiểm tra tháng/`openFrom` như khi tạo.
+
+4) DELETE /api/work-schedules/:id
+  - Xóa 1 lịch; không admin chỉ được xóa lịch của chính mình. Áp dụng kiểm tra `openFrom`.
+
+5) POST /api/work-schedules/bulk
+  - Thêm/sửa nhiều lịch trong một lần: { items: [...], upsert=true }.
+  - Admin: cho tháng hiện tại hoặc kế tiếp; người thường: chỉ tháng kế tiếp; không được bulk cho người khác.
+
+6) GET /api/work-schedules/stats/summary?month=YYYY-MM[&role=]
+  - Tổng hợp số ca theo `shiftType` cho từng `role` trong tháng.
+
+7) GET /api/work-schedules/me/self?month=YYYY-MM
+  - Lấy lịch của chính người dùng trong tháng yêu cầu.
+
+8) DELETE /api/work-schedules/me/next
+  - Xóa toàn bộ lịch tháng kế tiếp của người dùng hiện tại (admin có thể chỉ định `?userId=` tùy mở rộng).
+
+9) GET /api/work-schedules/config/next
+  - Xem cấu hình tháng kế tiếp: `openFrom`, `shiftHours` (giờ ca), `note`. Nếu chưa có, trả mặc định.
+
+10) PUT /api/work-schedules/config/next
+  - Chỉ admin: cập nhật `openFrom` (phải thuộc tháng hiện tại), `note`, `shiftHours` (HH:MM).
+
+11) GET /api/work-schedules/shift-hours
+  - Lấy khung giờ ca đang hiệu lực cho tháng kế tiếp (từ cấu hình hoặc mặc định).
+
+12) POST /api/work-schedules/auto-generate { dryRun=true, replaceExisting=false, roles? }
+  - Chỉ admin: sinh tự động lịch tháng kế tiếp từ service; có thể áp dụng thật (không dryRun) và thay thế lịch sẵn có.
+
+Ghi chú:
+- Khuyến nghị index: WorkSchedule(userId, day, shift), WorkSchedule(day, role, shift), ScheduleConfig(month).
+*/
 // Router quản lý lịch làm việc (tháng kế tiếp)
 const express = require('express');
 const WorkSchedule = require('../models/WorkSchedule');

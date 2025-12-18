@@ -1,3 +1,41 @@
+/*
+TÓM TẮT API — Báo cáo doanh thu
+- Mục tiêu: Tổng hợp doanh thu theo thời gian, top thuốc/dịch vụ.
+- Quyền: Thường dành cho quản trị/kế toán (tùy middleware gắn ở router cha).
+- Nhóm doanh thu: hosokham, canlamsang, donthuoc, lichkham (= CONSULTATION_PRICE cho mỗi lịch có trạng thái 'da_thanh_toan' hoặc 'da_kham').
+- Tham số chung: year (YYYY), month (1-12), date (YYYY-MM-DD), limit (mặc định 10).
+
+Endpoints chính:
+1) GET /api/revenue/summary?year=YYYY
+  - Tổng hợp theo tháng trong năm; chỉ tính ThanhToan.status='da_thanh_toan'.
+  - Doanh thu 'lichkham' cộng riêng: count(LichKham trangThai in ['da_thanh_toan','da_kham']) × CONSULTATION_PRICE.
+  - Trả về: { year, months[{ month, monthTotal, categories{hosokham,canlamsang,donthuoc,lichkham}, bookingCount }],
+          categorySeries, totalSeries, consultationPrice }.
+
+2) GET /api/revenue/month?year=YYYY&month=MM
+  - Tổng hợp theo ngày trong tháng; logic doanh thu & 'lichkham' tương tự summary.
+  - Trả về: { year, month, days[{ day, dayTotal, categories{...}, bookingCount }],
+          categorySeries, totalSeries, consultationPrice }.
+
+3) GET /api/revenue/day?date=YYYY-MM-DD
+  - Danh sách thanh toán trong ngày (đã trả), kèm bệnh nhân/bác sĩ; cộng thêm doanh thu lịch khám cố định.
+  - Trả về: { date, total, paymentTotal, bookingRevenue, bookingCount, count, payments[], consultationPrice }.
+
+4) GET /api/revenue/top/medicines?year=YYYY[&month=MM][&limit=N]
+  - Top thuốc theo số lượng đã phát (ước tính doanh thu = soLuong × giá thuốc).
+  - Điều kiện: ThanhToan targetType='donthuoc' & status='da_thanh_toan' trong khoảng.
+  - Trả về: { items: [{ id, name, unit, price, quantity, estimatedRevenue }], range, year, month }.
+
+5) GET /api/revenue/top/services?year=YYYY[&month=MM][&limit=N]
+  - Top dịch vụ từ chỉ định CLS đã thanh toán (ước tính doanh thu = gia × số lần).
+  - Điều kiện: ThanhToan targetType='canlamsang' & status='da_thanh_toan' trong khoảng.
+  - Trả về: { items: [{ id, name, price, count, estimatedRevenue }], range, year, month }.
+
+Ghi chú:
+- Chỉ tính tiền thực thu khi ThanhToan.status='da_thanh_toan'.
+- Doanh thu 'lichkham' không lấy từ ThanhToan mà tính theo số lịch thành công × CONSULTATION_PRICE (mặc định 150000 VND).
+- Khuyến nghị index: ThanhToan(ngayThanhToan, status, targetType), LichKham(ngayKham, trangThai).
+*/
 // Router báo cáo doanh thu và top dịch vụ/thuốc
 const express = require('express');
 const router = express.Router();

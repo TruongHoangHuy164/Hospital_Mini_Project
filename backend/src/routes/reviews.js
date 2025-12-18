@@ -4,6 +4,16 @@ const auth = require('../middlewares/auth');
 const authorize = require('../middlewares/authorize');
 const router = express.Router();
 
+// ===== Tóm tắt API Đánh giá (reviews) =====
+// Quyền hạn:
+// - GET công khai; tạo/sửa/xoá phụ thuộc xác thực hoặc quyền admin.
+//
+// - GET    /api/reviews                 : Lấy danh sách đánh giá mới nhất (tham số limit)
+// - POST   /api/reviews                 : Tạo đánh giá (auth) — rating 1..5, comment tùy chọn
+// - DELETE /api/reviews/:id             : Admin xóa đánh giá bất kỳ (auth + admin)
+// - PUT    /api/reviews/:id             : Người dùng sửa đánh giá của chính mình (auth)
+// - DELETE /api/reviews/:id/own         : Người dùng xóa đánh giá của chính mình (auth)
+
 // GET /api/reviews - latest reviews
 router.get('/', async (req, res) => {
   try {

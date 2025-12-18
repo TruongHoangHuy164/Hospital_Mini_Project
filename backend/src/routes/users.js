@@ -14,6 +14,25 @@ const { sendOtpEmail } = require('../services/emailService');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Người dùng (users) =====
+// Quyền hạn tổng quan:
+// - Các route quản trị dùng cặp middleware: auth + authorize('admin').
+// - Các route tự phục vụ dùng auth (user hiện tại).
+//
+// Quản trị
+// - GET    /api/users                         : Liệt kê người dùng (phân trang, tìm theo tên/email, lọc theo role) [admin]
+// - GET    /api/users/:id/profile             : Lấy hồ sơ tổng hợp của 1 user (gộp thông tin BenhNhan mới nhất) [admin]
+// - PATCH  /api/users/:id/role                : Cập nhật vai trò (user/doctor/admin/reception/lab/cashier/nurse/pharmacy) [admin]
+// - PATCH  /api/users/:id/lock                : Khoá/Mở khoá tài khoản; khi khoá sẽ thu hồi toàn bộ refresh tokens [admin]
+//
+// Tự phục vụ (self-service)
+// - GET    /api/users/my-patient-profile      : Lấy (hoặc tạo cơ bản) hồ sơ BenhNhan của chính user (phục vụ đặt lịch)
+// - GET    /api/users/profile                 : Lấy hồ sơ tổng hợp (User + BenhNhan)
+// - PUT    /api/users/profile                 : Cập nhật hồ sơ (kiểm tra hợp lệ: họ tên, giới tính, ngày sinh, SĐT...)
+// - POST   /api/users/request-change-password-otp : Yêu cầu OTP (email) để đổi mật khẩu; xác thực mật khẩu hiện tại trước khi gửi OTP
+// - POST   /api/users/verify-change-password-otp  : Xác thực OTP hợp lệ, đổi mật khẩu, thu hồi toàn bộ refresh tokens
+// - PUT    /api/users/change-password          : Phương thức cũ đổi mật khẩu (giữ tương thích); thu hồi refresh tokens
+//
 // GET /api/users?page=1&limit=10&q=abc&role=admin
 // Mô tả: Liệt kê người dùng với phân trang, tìm kiếm theo tên/email và lọc theo vai trò.
 // Phân quyền: Chỉ admin.

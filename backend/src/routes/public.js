@@ -6,6 +6,16 @@ const LoaiThuoc = require('../models/LoaiThuoc');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Công khai (public) =====
+// Không yêu cầu đăng nhập. Phục vụ tra cứu dịch vụ, chuyên khoa, bác sĩ và thuốc.
+//
+// - GET  /api/public/services                : Danh sách dịch vụ đang active; lọc theo chuyenKhoaId, từ khoá q
+// - GET  /api/public/specialties             : Danh sách chuyên khoa (hiện lấy tất cả)
+// - GET  /api/public/doctors                 : Danh sách bác sĩ cơ bản; lọc q, chuyenKhoa (id hoặc tên), phongKhamId; giới hạn limit
+// - GET  /api/public/medicines               : Danh sách thuốc (phân trang); q, categoryId, sortBy, order, page, limit
+// - GET  /api/public/medicines/:id           : Chi tiết 1 thuốc
+// - GET  /api/public/medicine-categories     : Danh mục thuốc kèm số lượng thuốc mỗi danh mục
+
 // Công khai: liệt kê dịch vụ đang hoạt động, hỗ trợ lọc theo chuyên khoa và từ khóa
 // GET /api/public/services?chuyenKhoaId=...&q=...
 router.get('/services', async (req, res, next) => {

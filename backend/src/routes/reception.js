@@ -5,6 +5,18 @@ const DonThuoc = require('../models/DonThuoc');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Lễ tân (reception) =====
+// Lưu ý quyền hạn: Dành cho 'reception' hoặc 'admin' (tùy cấu hình middleware chung).
+//
+// - GET  /api/reception/booking-stats   : Thống kê đặt lịch theo năm/tháng
+//   + Tham số: year (YYYY), month (1-12, tùy chọn), top (số user đặt lịch nhiều nhất)
+//   + Trả về: tổng số lịch, số người dùng duy nhất, breakdown theo trạng thái,
+//             biểu đồ theo tháng hoặc theo ngày, topUsers, tỉ lệ dùng PatientProfile/BenhNhan, và khoảng thời gian thống kê
+//
+// - GET  /api/reception/pharmacy-stats  : Thống kê doanh thu quầy thuốc theo ngày trong 1 tháng
+//   + Tham số: year (YYYY), month (1-12)
+//   + Trả về: mảng days [{day, labRevenue}], period (from/to)
+
 // GET /api/reception/booking-stats
 // Thống kê đặt lịch cho lễ tân (chỉ dành cho quyền 'reception' hoặc 'admin')
 router.get('/booking-stats', async (req, res, next) => {

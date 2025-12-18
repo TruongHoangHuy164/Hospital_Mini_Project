@@ -6,6 +6,18 @@ const User = require('../models/User');
 
 const router = express.Router();
 
+// ===== Tóm tắt API Bệnh nhân (patients) =====
+// Quyền hạn:
+// - Các route có middleware requireReceptionOrAdmin chỉ cho 'admin' hoặc 'reception'.
+// - Route GET /api/patients (q=...) phục vụ tra cứu công khai cho bác sĩ.
+//
+// - GET    /api/patients/search              : Tìm bệnh nhân (BenhNhan) + hồ sơ người thân (PatientProfile), gộp kết quả; yêu cầu admin/reception
+// - GET    /api/patients/user-by-contact     : Tra cứu tài khoản theo SĐT/email; trả user + selfPatient + relatives; yêu cầu admin/reception
+// - POST   /api/patients/provision-user      : Cấp tài khoản cơ bản theo SĐT/email (mật khẩu mặc định) và tạo BenhNhan (self) nếu thiếu; yêu cầu admin/reception
+// - POST   /api/patients/:userId/profiles    : Tạo hồ sơ người thân thay mặt user; yêu cầu admin/reception
+// - GET    /api/patients/:id                 : Lấy chi tiết bệnh nhân + danh sách người thân; yêu cầu admin/reception
+// - GET    /api/patients?q=...               : Tìm bệnh nhân theo tên/SĐT (công khai cho bác sĩ)
+
 // Kiểm tra quyền đơn giản: chỉ cho admin hoặc lễ tân (reception)
 // Yêu cầu quyền: chỉ cho phép 'admin' hoặc 'reception'
 function requireReceptionOrAdmin(req, res, next){
