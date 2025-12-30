@@ -1,129 +1,159 @@
-// Router đặt lịch khám và truy xuất kết quả/hồ sơ bệnh nhân
-// File này định nghĩa các endpoint REST phục vụ quy trình đặt lịch,
-// tra cứu lịch, kết quả cận lâm sàng, số thứ tự, và tích hợp thanh toán MoMo.
-// Tất cả lời chú thích đều bằng tiếng Việt để dễ hiểu.
-const express = require('express'); // Import framework Express để tạo router HTTP
-const mongoose = require('mongoose'); // Import Mongoose để thao tác ObjectId và MongoDB
-const crypto = require('crypto'); // Dùng để tạo/kiểm tra chữ ký HMAC với MoMo
-// Model bệnh nhân (self)
-const BenhNhan = require('../models/BenhNhan'); // Model bệnh nhân (gắn với user)
-// Model chuyên khoa
-const ChuyenKhoa = require('../models/ChuyenKhoa'); // Model chuyên khoa
-// Model bác sĩ
-const BacSi = require('../models/BacSi'); // Model bác sĩ
-// Model lịch khám
-const LichKham = require('../models/LichKham'); // Model lịch khám
-// Model số thứ tự
-const SoThuTu = require('../models/SoThuTu'); // Model số thứ tự (ticket/queue)
-// Model hồ sơ khám
-const HoSoKham = require('../models/HoSoKham'); // Model hồ sơ khám bệnh
-// Model cận lâm sàng
-const CanLamSang = require('../models/CanLamSang'); // Model cận lâm sàng (xét nghiệm, chẩn đoán hình ảnh...)
-// Lịch làm việc nhân sự
-const WorkSchedule = require('../models/WorkSchedule'); // Lịch làm việc theo ca của nhân sự
-// Cấu hình lịch tháng (bao gồm khung giờ ca)
-const ScheduleConfig = require('../models/ScheduleConfig'); // Cấu hình khung giờ ca theo tháng
-// Hồ sơ người thân
-const PatientProfile = require('../models/PatientProfile'); // Hồ sơ người thân do user quản lý
+const express = require('express'); // Import Express để tạo router HTTP
+const mongoose = require('mongoose'); // Import Mongoose để làm việc với MongoDB/ObjectId
+const crypto = require('crypto'); // Import crypto để ký/kiểm tra chữ ký HMAC (MoMo)
+const BenhNhan = require('../models/BenhNhan'); // Model: Bệnh nhân gắn với user
+const ChuyenKhoa = require('../models/ChuyenKhoa'); // Model: Chuyên khoa
+const BacSi = require('../models/BacSi'); // Model: Bác sĩ
+const LichKham = require('../models/LichKham'); // Model: Lịch khám
+const SoThuTu = require('../models/SoThuTu'); // Model: Số thứ tự (hàng đợi)
+const HoSoKham = require('../models/HoSoKham'); // Model: Hồ sơ khám bệnh
+const CanLamSang = require('../models/CanLamSang'); // Model: Cận lâm sàng
+const WorkSchedule = require('../models/WorkSchedule'); // Model: Lịch làm việc theo ca
+const ScheduleConfig = require('../models/ScheduleConfig'); // Model: Cấu hình ca theo tháng
+const PatientProfile = require('../models/PatientProfile'); // Model: Hồ sơ người thân
 const auth = require('../middlewares/auth'); // Middleware xác thực người dùng
 
-const router = express.Router(); // Khởi tạo router Express
+const router = express.Router(); // Khởi tạo một router Express
 
-// Helpers
-// Tính đầu ngày/cuối ngày để lọc theo ngày
-function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); } // Lấy 00:00:00 của ngày
-function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); } // Lấy 00:00:00 của ngày kế tiếp
-// Chuẩn hoá chuỗi giờ về định dạng HH:MM để so sánh theo thứ tự chuỗi an toàn
-function normTimeStr(t){
+
+/*
+TÓM TẮT API — Đặt lịch & MoMo (Booking)
+- Mục tiêu: Đặt lịch khám (self/người thân/walk-in), tra cứu lịch/kết quả, hàng đợi (STT), và thanh toán MoMo.
+- Quyền tổng quát:
+  - Nhiều endpoint yêu cầu auth (user đăng nhập). Các thao tác quản trị/tiếp nhận giới hạn role: admin/reception.
+  - Hạn chế đặt lịch: user KHÔNG đặt cho ngày hôm nay hoặc đã qua; tiếp nhận trực tiếp (walk-in) được phép trong giờ ca và khi bác sĩ có lịch làm việc.
+- Mô hình liên quan: BenhNhan, PatientProfile, BacSi, ChuyenKhoa, LichKham, SoThuTu, HoSoKham, CanLamSang, WorkSchedule, ScheduleConfig.
+
+Endpoints chính:
+1) Bệnh nhân của user
+  - POST /api/booking/patients: tạo/cập nhật hồ sơ BenhNhan cho user hiện tại.
+  - GET  /api/booking/patients?phone=: liệt kê bệnh nhân thuộc user (khách có thể tra theo SĐT).
+
+2) Lịch/kết quả của user
+  - GET /api/booking/my-appointments?page&limit: lịch khám do user đặt (nguoiDatId).
+  - GET /api/booking/my-results?page&limit: kết quả CLS thuộc các hồ sơ của user.
+  - GET /api/booking/my-cases?page&limit: các hồ sơ khám (HoSoKham) của user.
+  - GET /api/booking/my-cases/:id/detail: chi tiết hồ sơ + CLS + đơn thuốc.
+
+3) Khám & lịch bác sĩ
+  - GET  /api/booking/specialties: danh mục chuyên khoa.
+  - GET  /api/booking/availability?chuyenKhoaId&date=YYYY-MM-DD: bác sĩ & khung giờ trống theo ngày/chuyên khoa (ẩn hôm nay và quá khứ cho user).
+  - POST /api/booking/appointments: tạo lịch (self/relative/walk-in). Walk-in chỉ cho admin/reception, phải trong giờ ca và bác sĩ có WorkSchedule cùng ngày/ca.
+  - POST /api/booking/appointments/:id/pay: xác nhận đã thanh toán và cấp STT.
+  - GET  /api/booking/appointments?date&benhNhanId&bacSiId: liệt kê lịch theo bộ lọc.
+  - GET  /api/booking/doctor-appointments?bacSiId&date: (auth) chỉ admin/reception xem lịch 1 bác sĩ theo ngày.
+  - PUT  /api/booking/appointments/:id/time { khungGio?, date? }: (auth) admin/reception chỉnh ngày/giờ (không cho lịch đã khám).
+  - PUT  /api/booking/appointments/:id/reassign { bacSiId, khungGio?, date? }: (auth) admin/reception đổi bác sĩ/giờ.
+  - DELETE /api/booking/appointments/:id: (auth) người đặt tự hủy; chặn lịch đã khám; không hủy trong vòng 2 giờ trước giờ khám.
+  - GET  /api/booking/queues?date&bacSiId: liệt kê STT theo ngày (kèm bác sĩ/phòng khám nếu có).
+  - GET  /api/booking/doctor-available-days?bacSiId&month=YYYY-MM: ngày/ca bác sĩ có lịch, kèm shiftHours của tháng.
+  - GET  /api/booking/appointments/:id/ticket: tra trạng thái lịch + STT.
+  - GET  /api/booking/appointments/:id/detail-simple: thông tin cơ bản để hiển thị (bác sĩ/phòng khám).
+
+4) Thanh toán MoMo
+  - POST /api/booking/appointments/:id/momo: tạo phiên thanh toán; trả payUrl/deeplink.
+  - POST /api/booking/momo/ipn: IPN xác nhận; đánh dấu da_thanh_toan và cấp STT (idempotent theo ngày khám).
+  - POST /api/booking/momo/return: client POST từ redirect; xác minh chữ ký; set trạng thái & trả STT.
+  - GET  /api/booking/momo/return-get: endpoint redirect GET; xác minh chữ ký; chuyển hướng về frontend kèm trạng thái.
+
+Quy tắc/STT & Trạng thái:
+- Trạng thái lịch: cho_thanh_toan → da_thanh_toan → (ngoài phạm vi file này) da_kham.
+- Cấp số thứ tự (SoThuTu): theo tổng số STT đã cấp cho tất cả lịch trong cùng ngày khám (tăng dần 1,2,3,...), tránh trùng qua đếm tổng.
+
+MoMo cấu hình (mặc định dev): MOMO_PARTNER_CODE, MOMO_ACCESS_KEY, MOMO_SECRET_KEY, MOMO_ENDPOINT, MOMO_RETURN_URL, MOMO_IPN_URL, SERVER_BASE_URL, FRONTEND_RETURN_URL, MOMO_AMOUNT.
+
+Chỉ mục khuyến nghị:
+- LichKham(bacSiId, ngayKham, khungGio) + unique theo (bacSiId, ngayKham, khungGio); LichKham(nguoiDatId, ngayKham).
+- SoThuTu(lichKhamId), WorkSchedule(userId, role, day, shift), ScheduleConfig(month), CanLamSang(hoSoKhamId), HoSoKham(benhNhanId, createdAt).
+*/
+
+
+// Helpers: Hàm tiện ích xử lý ngày/giờ
+function startOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()); } // Trả về 00:00:00 của ngày d
+function endOfDay(d){ return new Date(d.getFullYear(), d.getMonth(), d.getDate()+1); } // Trả về 00:00:00 của ngày kế tiếp
+function normTimeStr(t){ // Chuẩn hoá chuỗi "HH:MM" về dạng an toàn so sánh chuỗi
   if(!t || typeof t !== 'string') return '';
   const m = /^(\d{1,2}):(\d{2})$/.exec(t.trim());
-  if(!m) return t; // fallback nguyên bản
+  if(!m) return t;
   const hh = String(Math.min(99, Math.max(0, parseInt(m[1],10)))).padStart(2,'0');
   const mm = String(Math.min(59, Math.max(0, parseInt(m[2],10)))).padStart(2,'0');
   return `${hh}:${mm}`;
 }
-// Tạo khoảng ngày cho 1 tháng (YYYY-MM) để so sánh chuỗi 'YYYY-MM-DD'
-function monthRangeStr(month){
+function monthRangeStr(month){ // Trả về khoảng [start,end) dạng chuỗi cho tháng YYYY-MM
   const m = /^([0-9]{4})-([0-9]{2})$/.exec(month||'');
   if(!m) return null;
   const y = +m[1]; const mon = +m[2]; if(mon<1||mon>12) return null;
   const start = `${m[1]}-${m[2]}-01`;
   const nextMonth = new Date(Date.UTC(y, mon-1, 1)); nextMonth.setUTCMonth(nextMonth.getUTCMonth()+1);
   const ny = nextMonth.getUTCFullYear(); const nm = String(nextMonth.getUTCMonth()+1).padStart(2,'0');
-  const end = `${ny}-${nm}-01`; // exclusive
+  const end = `${ny}-${nm}-01`;
   return { start, end };
 }
 
-// POST /api/booking/patients - Tạo/cập nhật hồ sơ bệnh nhân cho chính user hiện tại
-router.post('/patients', auth, async (req, res, next) => { // Tạo/cập nhật hồ sơ bệnh nhân cho user hiện tại
-  try{
-    const userId = req.user?.id || null; // Lấy id người dùng từ token
-    const { id, hoTen, ngaySinh, gioiTinh, soDienThoai, diaChi, maBHYT } = req.body || {};
-    const data = { userId, hoTen, ngaySinh, gioiTinh, soDienThoai, diaChi, maBHYT }; // Payload lưu DB
-    let bn;
-    if(id){
-      bn = await BenhNhan.findOneAndUpdate({ _id: id, ...(userId? { userId } : {}) }, data, { new: true }); // Cập nhật nếu có id
-    } else {
-      bn = await BenhNhan.create(data); // Tạo mới nếu không có id
+router.post('/patients', auth, async (req, res, next) => { // Endpoint tạo/cập nhật bệnh nhân cho user hiện tại
+  try{ // Bọc trong try để xử lý lỗi
+    const userId = req.user?.id || null; // Lấy id user từ token (có thể null)
+    const { id, hoTen, ngaySinh, gioiTinh, soDienThoai, diaChi, maBHYT } = req.body || {}; // Lấy dữ liệu từ body
+    const data = { userId, hoTen, ngaySinh, gioiTinh, soDienThoai, diaChi, maBHYT }; // Tạo object dữ liệu lưu DB
+    let bn; // Biến kết quả hồ sơ bệnh nhân
+    if(id){ // Nếu có id → cập nhật hồ sơ có sẵn
+      bn = await BenhNhan.findOneAndUpdate({ _id: id, ...(userId? { userId } : {}) }, data, { new: true }); // Cập nhật và trả bản ghi mới
+    } else { // Nếu không có id → tạo mới
+      bn = await BenhNhan.create(data); // Tạo bản ghi bệnh nhân mới
     }
-    return res.status(id?200:201).json(bn); // Trả về hồ sơ vừa lưu
-  }catch(err){ return next(err); }
+    return res.status(id?200:201).json(bn); // Trả 200 nếu cập nhật, 201 nếu tạo mới
+  }catch(err){ return next(err); } // Chuyển lỗi cho middleware
 });
 
-// GET /api/booking/patients - Liệt kê bệnh nhân của user hiện tại (hoặc tìm theo SĐT cho khách)
-router.get('/patients', auth, async (req, res, next) => { // Liệt kê bệnh nhân thuộc user
-  try{
-    const userId = req.user?.id || null;
-    const { phone } = req.query;
-    const filter = userId ? { userId } : (phone? { soDienThoai: phone } : {}); // Nếu khách thì tra theo SĐT
-    const items = await BenhNhan.find(filter).sort({ updatedAt: -1 }).limit(20);
-    return res.json(items);
-  }catch(err){ return next(err); }
+router.get('/patients', auth, async (req, res, next) => { // Endpoint liệt kê bệnh nhân của user (hoặc theo SĐT)
+  try{ // Bắt đầu xử lý
+    const userId = req.user?.id || null; // Lấy id user
+    const { phone } = req.query; // Lấy tham số phone nếu có
+    const filter = userId ? { userId } : (phone? { soDienThoai: phone } : {}); // Xây filter: theo userId hoặc theo SĐT
+    const items = await BenhNhan.find(filter).sort({ updatedAt: -1 }).limit(20); // Tìm tối đa 20 hồ sơ
+    return res.json(items); // Trả danh sách hồ sơ
+  }catch(err){ return next(err); } // Trả lỗi cho middleware
 });
 
-// GET /api/booking/my-appointments?page=1&limit=10
-// Mô tả: Trả về danh sách lịch khám của người dùng hiện tại (theo LichKham.nguoiDatId)
-router.get('/my-appointments', auth, async (req, res, next) => { // Lịch khám đã đặt bởi user
-  try{
-    const page = Math.max(parseInt(req.query.page||'1',10),1);
-    const limit = Math.min(Math.max(parseInt(req.query.limit||'10',10),1),50);
-    const skip = (page-1)*limit;
-    
-    const filter = { nguoiDatId: req.user.id }; // Lọc theo người đặt
+router.get('/my-appointments', auth, async (req, res, next) => { // Endpoint lấy danh sách lịch do user đã đặt
+  try{ // Bắt đầu xử lý
+    const page = Math.max(parseInt(req.query.page||'1',10),1); // Trang hiện tại (>=1)
+    const limit = Math.min(Math.max(parseInt(req.query.limit||'10',10),1),50); // Số dòng mỗi trang (1..50)
+    const skip = (page-1)*limit; // Số bản ghi bỏ qua
 
-    const [items, total] = await Promise.all([
-    LichKham.find(filter)
-        .sort({ ngayKham: -1, createdAt: -1 })
+    const filter = { nguoiDatId: req.user.id }; // Lọc lịch theo người đặt là user hiện tại
+
+    const [items, total] = await Promise.all([ // Truy vấn danh sách và tổng số song song
+      LichKham.find(filter)
+        .sort({ ngayKham: -1, createdAt: -1 }) // Sắp xếp mới nhất trước
         .skip(skip).limit(limit)
-        .populate('bacSiId','hoTen chuyenKhoa')
-        .populate('chuyenKhoaId','ten')
-    .populate('benhNhanId', 'hoTen') // Gắn thông tin bệnh nhân khi đặt cho bản thân
-    .populate('hoSoBenhNhanId', 'hoTen'), // Gắn thông tin hồ sơ người thân khi đặt thay
-      LichKham.countDocuments(filter)
+        .populate('bacSiId','hoTen chuyenKhoa') // Lấy thông tin bác sĩ
+        .populate('chuyenKhoaId','ten') // Lấy tên chuyên khoa
+        .populate('benhNhanId', 'hoTen') // Tên bệnh nhân khi đặt cho bản thân
+        .populate('hoSoBenhNhanId', 'hoTen'), // Tên hồ sơ người thân khi đặt thay
+      LichKham.countDocuments(filter) // Đếm tổng số dòng
     ]);
 
-    // Gắn số thứ tự cho từng lịch khám
-    const stts = await SoThuTu.find({ lichKhamId: { $in: items.map(i=>i._id) } }).select('lichKhamId soThuTu trangThai').lean(); // Lấy số thứ tự tương ứng
-    const sttMap = stts.reduce((m,s)=>{ m[String(s.lichKhamId)] = s; return m; },{});
+    const stts = await SoThuTu.find({ lichKhamId: { $in: items.map(i=>i._id) } }).select('lichKhamId soThuTu trangThai').lean(); // Lấy STT của các lịch
+    const sttMap = stts.reduce((m,s)=>{ m[String(s.lichKhamId)] = s; return m; },{}); // Map lichKhamId -> STT
 
-    const result = items.map(ap => ({ // Chuẩn hoá dữ liệu trả về cho frontend
-      _id: ap._id,
-      ngayKham: ap.ngayKham,
-      khungGio: ap.khungGio,
-      trangThai: ap.trangThai,
-      benhNhanId: ap.benhNhanId?._id || ap.benhNhanId || null,
-      hoSoBenhNhanId: ap.hoSoBenhNhanId?._id || ap.hoSoBenhNhanId || null,
-      // Xác định tên bệnh nhân từ trường đã populate (bản thân hoặc người thân)
-      benhNhan: {
+    const result = items.map(ap => ({ // Chuẩn hoá dữ liệu trả về
+      _id: ap._id, // ID lịch
+      ngayKham: ap.ngayKham, // Ngày khám
+      khungGio: ap.khungGio, // Khung giờ
+      trangThai: ap.trangThai, // Trạng thái lịch
+      benhNhanId: ap.benhNhanId?._id || ap.benhNhanId || null, // ID bệnh nhân
+      hoSoBenhNhanId: ap.hoSoBenhNhanId?._id || ap.hoSoBenhNhanId || null, // ID hồ sơ người thân
+      benhNhan: { // Tên hiển thị của người khám (bản thân hoặc người thân)
         hoTen: ap.hoSoBenhNhanId ? ap.hoSoBenhNhanId.hoTen : (ap.benhNhanId ? ap.benhNhanId.hoTen : 'N/A')
       },
-      bacSi: ap.bacSiId ? { id: ap.bacSiId._id, hoTen: ap.bacSiId.hoTen, chuyenKhoa: ap.bacSiId.chuyenKhoa } : null,
-      chuyenKhoa: ap.chuyenKhoaId ? { id: ap.chuyenKhoaId._id, ten: ap.chuyenKhoaId.ten } : null,
-      soThuTu: sttMap[String(ap._id)]?.soThuTu || null,
-      sttTrangThai: sttMap[String(ap._id)]?.trangThai || null,
+      bacSi: ap.bacSiId ? { id: ap.bacSiId._id, hoTen: ap.bacSiId.hoTen, chuyenKhoa: ap.bacSiId.chuyenKhoa } : null, // Thông tin bác sĩ
+      chuyenKhoa: ap.chuyenKhoaId ? { id: ap.chuyenKhoaId._id, ten: ap.chuyenKhoaId.ten } : null, // Thông tin chuyên khoa
+      soThuTu: sttMap[String(ap._id)]?.soThuTu || null, // Số thứ tự (nếu có)
+      sttTrangThai: sttMap[String(ap._id)]?.trangThai || null, // Trạng thái của STT (nếu có)
     }));
-    res.json({ items: result, total, page, limit, totalPages: Math.ceil(total/limit) });
-  }catch(err){ return next(err); }
+    res.json({ items: result, total, page, limit, totalPages: Math.ceil(total/limit) }); // Trả về phân trang
+  }catch(err){ return next(err); } // Xử lý lỗi chung
 });
 
 
@@ -364,44 +394,57 @@ router.get('/availability', async (req, res, next) => { // Lấy bác sĩ & khun
 });
 
 // POST /api/booking/appointments - Tạo lịch khám (cho bản thân hoặc người thân)
-router.post('/appointments', auth, async (req, res, next) => { // Tạo lịch khám (self/relative/walk-in)
+// Tạo lịch khám (cho bản thân/ người thân/ tiếp nhận trực tiếp)
+// Luồng xử lý tổng quát:
+// 1) Đọc dữ liệu đầu vào, xác định chế độ walk-in (quầy) dựa trên `source` và role.
+// 2) Kiểm tra đủ trường bắt buộc (bác sĩ, chuyên khoa, ngày/giờ đối với user thường).
+// 3) Chuẩn hoá ngày khám: user thường không được đặt hôm nay/quá khứ; walk-in mặc định dùng hôm nay.
+// 4) Với walk-in: kiểm tra giờ hiện tại nằm trong khung ca; bác sĩ có lịch làm việc đúng ca/ngày.
+// 5) Xác định đặt cho bản thân (`benhNhanId`) hay người thân (`hoSoBenhNhanId`), có thể tạo `BenhNhan` tạm từ `PatientProfile`.
+// 6) Tạo bản ghi `LichKham` với trạng thái `cho_thanh_toan`; trả về lịch.
+router.post('/appointments', auth, async (req, res, next) => {
   try{
+    // Lấy thông tin từ body: id bệnh nhân/ hồ sơ người thân, bác sĩ, chuyên khoa, ngày, giờ, và nguồn đặt
     const { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio, source } = req.body || {};
-    const nguoiDatId = req.user.id;
+    const nguoiDatId = req.user.id; // Người đặt chính là user hiện tại
 
-    const isWalkIn = source === 'reception-direct' && ['admin','reception'].includes(req.user.role); // Tiếp nhận trực tiếp tại quầy
+    // Xác định đặt tại quầy (walk-in) khi nguồn là 'reception-direct' và role thuộc admin/reception
+    const isWalkIn = source === 'reception-direct' && ['admin','reception'].includes(req.user.role);
     console.log('Booking request data:', { benhNhanId, hoSoBenhNhanId, bacSiId, chuyenKhoaId, date, khungGio, source, nguoiDatId, isWalkIn });
 
+    // Phải cung cấp đúng 1 trong 2: benhNhanId (bản thân) hoặc hoSoBenhNhanId (người thân)
     if ((!benhNhanId && !hoSoBenhNhanId) || (benhNhanId && hoSoBenhNhanId)) {
       return res.status(400).json({ message: 'Cần cung cấp `benhNhanId` (cho bản thân) hoặc `hoSoBenhNhanId` (cho người thân).' });
     }
+    // Bắt buộc có bác sĩ và chuyên khoa
     if(!bacSiId || !chuyenKhoaId){
       return res.status(400).json({ message: 'Thiếu dữ liệu bắt buộc (bác sĩ, chuyên khoa).' });
     }
+    // Với user thường (không walk-in): bắt buộc có ngày và khung giờ
     if(!isWalkIn && (!date || !khungGio)){
       return res.status(400).json({ message: 'Thiếu dữ liệu bắt buộc (bác sĩ, chuyên khoa, ngày, giờ).' });
     }
-    
-    // Với lịch tiếp nhận trực tiếp: mặc định dùng ngày hôm nay nếu không truyền
-    const d = isWalkIn && !date ? new Date() : new Date(date); // Walk-in không truyền date thì dùng hôm nay
-    if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
-    const dayStart = startOfDay(d);
 
-    // Chặn đặt lịch cho ngày hôm nay hoặc ngày đã qua đối với người dùng (không phải tiếp nhận trực tiếp)
-    // Lịch tiếp nhận trực tiếp (walk-in) vẫn được phép trong cùng ngày nếu hệ thống cho phép
+    // Chuẩn hoá ngày khám: walk-in không truyền date thì dùng hôm nay
+    const d = isWalkIn && !date ? new Date() : new Date(date);
+    if(isNaN(d.getTime())) return res.status(400).json({ message: 'date không hợp lệ' });
+    const dayStart = startOfDay(d); // Lưu ngày dưới dạng 00:00:00 để gom theo ngày
+
+    // User thường: chặn đặt lịch hôm nay/ quá khứ
     const todayStart = startOfDay(new Date());
     if(!isWalkIn && dayStart.getTime() <= todayStart.getTime()){
       return res.status(400).json({ message: 'Không thể đặt lịch cho ngày hôm nay hoặc ngày đã qua.' });
     }
 
+    // Dữ liệu lịch khám khởi tạo
     const appointmentData = {
       nguoiDatId,
       bacSiId,
       chuyenKhoaId,
       ngayKham: dayStart,
+      // Với walk-in: tạo khungGio ngẫu nhiên (không chiếm slot chuẩn); còn lại dùng khungGio client gửi
       khungGio: (function(){
         if(!isWalkIn) return khungGio;
-        // Tạo mã thời gian ngẫu nhiên cho lịch tiếp nhận trực tiếp để không chiếm slot chuẩn
         const now = new Date();
         const hh = String(now.getHours()).padStart(2,'0');
         const mm = String(now.getMinutes()).padStart(2,'0');
@@ -412,71 +455,68 @@ router.post('/appointments', auth, async (req, res, next) => { // Tạo lịch k
       trangThai: 'cho_thanh_toan'
     };
 
-    // Với lịch tiếp nhận trực tiếp: đảm bảo thời điểm hiện tại nằm trong khung ca cấu hình hôm nay
+    // Walk-in: kiểm tra giờ hiện tại nằm trong khung ca; bác sĩ có lịch làm đúng ca/ngày
     if(isWalkIn){
-      // Load shift hours for current month
-      const yearMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-      const cfg = await ScheduleConfig.findOne({ month: yearMonth }); // Cấu hình ca làm việc tháng hiện tại
+      const yearMonth = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; // YYYY-MM của tháng hiện tại
+      const cfg = await ScheduleConfig.findOne({ month: yearMonth }); // Lấy cấu hình ca làm việc tháng
       const defaultShiftHours = {
         sang: { start: '07:30', end: '11:30' },
         chieu: { start: '13:00', end: '17:00' },
         toi: { start: '18:00', end: '22:00' }
       };
-      const shiftHours = cfg?.shiftHours || defaultShiftHours;
+      const shiftHours = cfg?.shiftHours || defaultShiftHours; // Dùng mặc định nếu chưa cấu hình
       const now = new Date();
       const nowStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-      const within = (range)=> range && nowStr >= range.start && nowStr <= range.end;
+      const within = (range)=> range && nowStr >= range.start && nowStr <= range.end; // Kiểm tra nằm trong khung ca
       let currentShift = null;
       if(within(shiftHours.sang)) currentShift = 'sang';
       else if(within(shiftHours.chieu)) currentShift = 'chieu';
       else if(within(shiftHours.toi)) currentShift = 'toi';
       if(!currentShift){
+        // Trả thông tin các khung ca để người dùng biết giờ làm
         return res.status(400).json({ message: `Ngoài giờ làm. Khung ca hôm nay: ` +
           [shiftHours.sang?`Sáng ${shiftHours.sang.start}-${shiftHours.sang.end}`:null, shiftHours.chieu?`Chiều ${shiftHours.chieu.start}-${shiftHours.chieu.end}`:null, shiftHours.toi?`Tối ${shiftHours.toi.start}-${shiftHours.toi.end}`:null].filter(Boolean).join('; ') });
       }
-      // Kiểm tra bác sĩ có làm việc trong ca này hôm nay
+      // Kiểm tra bác sĩ tồn tại và đã liên kết tài khoản User để có bản ghi WorkSchedule
       const bs = await BacSi.findById(bacSiId).select('userId hoTen chuyenKhoa');
       if(!bs) return res.status(404).json({ message: 'Bác sĩ không tồn tại' });
       if(!bs.userId){
         return res.status(400).json({ message: 'Bác sĩ chưa liên kết tài khoản để lập lịch' });
       }
+      // Kiểm tra bác sĩ có lịch làm việc đúng ca trong ngày đó
       const dayStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const hasSchedule = await WorkSchedule.exists({ userId: bs.userId, role: 'doctor', day: dayStr, shift: currentShift }); // Kiểm tra bác sĩ có làm ca đó không
+      const hasSchedule = await WorkSchedule.exists({ userId: bs.userId, role: 'doctor', day: dayStr, shift: currentShift });
       if(!hasSchedule){
         return res.status(400).json({ message: `Bác sĩ không làm việc ca ${currentShift} hôm nay (${dayStr})` });
       }
     }
 
+    // Đặt cho bản thân hay người thân
     if (benhNhanId) {
-      // Đặt lịch cho bản thân (sử dụng BenhNhan model)
       console.log('Booking for self with benhNhanId:', benhNhanId);
-      appointmentData.benhNhanId = benhNhanId; // Đặt cho bản thân: gán benhNhanId
+      appointmentData.benhNhanId = benhNhanId; // Gán benhNhanId trực tiếp
     } else if (hoSoBenhNhanId) {
-      // Đặt lịch cho người thân (sử dụng PatientProfile model)
       console.log('Booking for relative with hoSoBenhNhanId:', hoSoBenhNhanId);
-      appointmentData.hoSoBenhNhanId = hoSoBenhNhanId;
-      
-      // Tìm PatientProfile
-      const profile = await PatientProfile.findById(hoSoBenhNhanId); // Tìm hồ sơ người thân
+      appointmentData.hoSoBenhNhanId = hoSoBenhNhanId; // Đặt theo hồ sơ người thân
+
+      // Tìm hồ sơ người thân
+      const profile = await PatientProfile.findById(hoSoBenhNhanId);
       if (!profile) {
         console.error('PatientProfile not found:', hoSoBenhNhanId);
         return res.status(404).json({ message: 'Không tìm thấy hồ sơ người thân' });
       }
-      
+
       console.log('Found PatientProfile:', {
         id: profile._id,
         hoTen: profile.hoTen,
         ngaySinh: profile.ngaySinh,
         gioiTinh: profile.gioiTinh
       });
-      
-      // Tạo BenhNhan từ PatientProfile data
-      const gioiTinhMapping = {
-        'Nam': 'nam',
-        'Nữ': 'nu', 
-        'Khác': 'khac'
-      };
-      
+
+      // Map giới tính từ biểu diễn văn bản sang mã hệ thống
+      const gioiTinhMapping = { 'Nam': 'nam', 'Nữ': 'nu', 'Khác': 'khac' };
+
+      // Tạo bản ghi BenhNhan tạm để liên kết lịch khám với người thân
       const benhNhanData = {
         userId: nguoiDatId,
         hoTen: profile.hoTen,
@@ -484,15 +524,15 @@ router.post('/appointments', auth, async (req, res, next) => { // Tạo lịch k
         gioiTinh: gioiTinhMapping[profile.gioiTinh] || 'khac',
         soDienThoai: profile.soDienThoai,
         diaChi: profile.diaChi,
-        maBHYT: profile.cccd // Use CCCD as temporary insurance number
+        maBHYT: profile.cccd // Dùng CCCD tạm như mã bảo hiểm
       };
-      
+
       console.log('Creating BenhNhan with data:', benhNhanData);
-      
+
       try {
-        const benhNhan = await BenhNhan.create(benhNhanData); // Tạo bản ghi BenhNhan tạm cho người thân
+        const benhNhan = await BenhNhan.create(benhNhanData); // Tạo bản ghi bệnh nhân tạm
         console.log('Created BenhNhan successfully:', benhNhan._id);
-        appointmentData.benhNhanId = benhNhan._id;
+        appointmentData.benhNhanId = benhNhan._id; // Liên kết lịch khám tới bệnh nhân vừa tạo
         console.log('Assigned benhNhanId to appointmentData:', appointmentData.benhNhanId);
       } catch (createError) {
         console.error('Error creating BenhNhan:', createError);
@@ -502,12 +542,11 @@ router.post('/appointments', auth, async (req, res, next) => { // Tạo lịch k
 
     console.log('Final appointment data:', appointmentData);
 
-    // Save as exact date with time start-of-day; store khungGio separately
-    const lk = await LichKham.create(appointmentData); // Lưu lịch khám vào DB
+    // Lưu lịch khám (ngày ở dạng start-of-day, giờ nằm ở trường khungGio)
+    const lk = await LichKham.create(appointmentData);
     console.log('Created appointment:', lk._id);
 
-    // For walk-in: không tự động cấp STT, chỉ cấp khi thanh toán
-    // Return appointment without queue number
+    // Walk-in: không cấp STT ngay; STT sẽ cấp khi thanh toán
     res.status(201).json(lk);
   }catch(err){
     console.error('Booking error:', err);
@@ -519,7 +558,8 @@ router.post('/appointments', auth, async (req, res, next) => { // Tạo lịch k
 });
 
 // POST /api/booking/appointments/:id/pay - Xác nhận đã thanh toán và cấp số thứ tự
-router.post('/appointments/:id/pay', async (req, res, next) => { // Xác nhận thanh toán và cấp STT
+// Xác nhận thanh toán và cấp số thứ tự (STT) cho lịch
+router.post('/appointments/:id/pay', async (req, res, next) => {
   try{
     const { id } = req.params;
     const appt = await LichKham.findById(id);
@@ -557,106 +597,105 @@ router.post('/appointments/:id/pay', async (req, res, next) => { // Xác nhận 
 // query: date=YYYY-MM-DD, benhNhanId, bacSiId
 router.get('/appointments', async (req, res, next) => { // Liệt kê lịch khám (lọc tuỳ chọn)
   try{
-    const { date, benhNhanId, bacSiId } = req.query;
-    const filter = {};
-    if(date){
-      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
-      filter.ngayKham = { $gte: startOfDay(d), $lt: endOfDay(d) };
+    const { date, benhNhanId, bacSiId } = req.query; // Lấy tham số lọc từ query
+    const filter = {}; // Khởi tạo điều kiện lọc
+    if(date){ // Nếu có ngày -> lọc trong khoảng ngày đó
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' }); // Kiểm tra ngày hợp lệ
+      filter.ngayKham = { $gte: startOfDay(d), $lt: endOfDay(d) }; // Lọc theo mốc đầu/cuối ngày
     }
-    if(benhNhanId) filter.benhNhanId = new mongoose.Types.ObjectId(benhNhanId);
-    if(bacSiId) filter.bacSiId = new mongoose.Types.ObjectId(bacSiId);
-    const items = await LichKham.find(filter).sort({ ngayKham: -1, khungGio: 1 });
-    res.json(items);
-  }catch(err){ return next(err); }
+    if(benhNhanId) filter.benhNhanId = new mongoose.Types.ObjectId(benhNhanId); // Lọc theo bệnh nhân
+    if(bacSiId) filter.bacSiId = new mongoose.Types.ObjectId(bacSiId); // Lọc theo bác sĩ
+    const items = await LichKham.find(filter).sort({ ngayKham: -1, khungGio: 1 }); // Truy vấn danh sách lịch theo điều kiện
+    res.json(items); // Trả về kết quả cho client
+  }catch(err){ return next(err); } // Bắt lỗi chung
 });
 
 // GET /api/booking/doctor-appointments?bacSiId=...&date=YYYY-MM-DD
 // Mô tả: Trả về danh sách lịch khám của 1 bác sĩ theo ngày (dành cho reception/admin; có thể mở rộng cho bác sĩ)
 router.get('/doctor-appointments', auth, async (req, res, next) => { // Lịch của 1 bác sĩ theo ngày
   try {
-    const { bacSiId, date } = req.query;
-    if(!bacSiId) return res.status(400).json({ message: 'Thiếu bacSiId' });
-    const doctorId = new mongoose.Types.ObjectId(bacSiId);
-    let dayFilter = {};
-    if(date){
-      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
-      dayFilter = { ngayKham: { $gte: startOfDay(d), $lt: endOfDay(d) } };
+    const { bacSiId, date } = req.query; // Nhận bácSiId và ngày cần xem
+    if(!bacSiId) return res.status(400).json({ message: 'Thiếu bacSiId' }); // Bắt buộc có bácSiId
+    const doctorId = new mongoose.Types.ObjectId(bacSiId); // Chuẩn hoá sang ObjectId
+    let dayFilter = {}; // Điều kiện lọc ngày
+    if(date){ // Nếu có ngày -> giới hạn theo ngày
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' }); // Kiểm tra
+      dayFilter = { ngayKham: { $gte: startOfDay(d), $lt: endOfDay(d) } }; // Khoảng ngày
     }
-    // Role kiểm tra: admin hoặc reception hoặc chính bác sĩ (user có id == bacSi.userId) - hiện BacSi model chưa populate userId ở đây nên tạm chấp nhận admin/reception
+    // Kiểm tra quyền: chỉ admin/reception (có thể mở rộng cho bác sĩ)
     if(!['admin','reception'].includes(req.user.role)){
-      // Cho phép người đặt xem lịch họ đặt với bác sĩ này (lọc theo nguoiDatId)
-      // Nếu muốn bác sĩ xem lịch của mình cần mapping user -> bacSi, bỏ qua ở đây nếu thiếu dữ liệu
+      // Nếu muốn cho bác sĩ xem lịch của mình cần mapping user -> bacSi.userId
       return res.status(403).json({ message: 'Không có quyền xem lịch bác sĩ' });
     }
-    const appts = await LichKham.find({ bacSiId: doctorId, ...dayFilter })
-      .sort({ khungGio: 1 })
-      .populate('benhNhanId','hoTen')
-      .populate('hoSoBenhNhanId','hoTen');
-    const result = appts.map(a => ({
+    const appts = await LichKham.find({ bacSiId: doctorId, ...dayFilter }) // Tìm lịch theo bác sĩ và ngày
+      .sort({ khungGio: 1 }) // Sắp xếp theo khung giờ tăng dần
+      .populate('benhNhanId','hoTen') // Lấy tên bệnh nhân
+      .populate('hoSoBenhNhanId','hoTen'); // Lấy tên hồ sơ người thân
+    const result = appts.map(a => ({ // Chuẩn hoá dữ liệu trả về
       _id: a._id,
       ngayKham: a.ngayKham,
       khungGio: a.khungGio,
       trangThai: a.trangThai,
-      benhNhanHoTen: a.hoSoBenhNhanId ? a.hoSoBenhNhanId.hoTen : (a.benhNhanId ? a.benhNhanId.hoTen : 'N/A')
+      benhNhanHoTen: a.hoSoBenhNhanId ? a.hoSoBenhNhanId.hoTen : (a.benhNhanId ? a.benhNhanId.hoTen : 'N/A') // Ưu tiên hiển thị người thân nếu có
     }));
-    res.json(result);
-  } catch(err){ return next(err); }
+    res.json(result); // Trả dữ liệu
+  } catch(err){ return next(err); } // Bắt lỗi
 });
 
 // PUT /api/booking/appointments/:id/time  { khungGio, date }
 // Mô tả: Chỉnh sửa khung giờ hoặc ngày khám (chỉ admin/reception)
 router.put('/appointments/:id/time', auth, async (req,res,next)=>{ // Sửa ngày/giờ khám (admin/reception)
   try {
-    if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền sửa lịch khám' });
-    const { id } = req.params;
-    const { khungGio, date } = req.body || {};
-    if(!khungGio && !date) return res.status(400).json({ message: 'Cần cung cấp khungGio hoặc date để sửa' });
-    const appt = await LichKham.findById(id);
-    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
-    if(appt.trangThai === 'da_kham') return res.status(400).json({ message: 'Không thể sửa lịch đã khám' });
-    if(date){
-      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
-      appt.ngayKham = startOfDay(d);
+    if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền sửa lịch khám' }); // Chỉ admin/quầy
+    const { id } = req.params; // ID lịch cần sửa
+    const { khungGio, date } = req.body || {}; // Nhận khung giờ và/hoặc ngày mới
+    if(!khungGio && !date) return res.status(400).json({ message: 'Cần cung cấp khungGio hoặc date để sửa' }); // Phải có ít nhất một trường
+    const appt = await LichKham.findById(id); // Tải lịch
+    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' }); // Không tồn tại
+    if(appt.trangThai === 'da_kham') return res.status(400).json({ message: 'Không thể sửa lịch đã khám' }); // Không sửa lịch đã hoàn tất
+    if(date){ // Nếu có ngày mới -> chuẩn hoá
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' }); // Kiểm tra
+      appt.ngayKham = startOfDay(d); // Lưu ở mốc 00:00
     }
-    if(khungGio){ appt.khungGio = khungGio; }
+    if(khungGio){ appt.khungGio = khungGio; } // Cập nhật khung giờ
     try {
-      await appt.save();
+      await appt.save(); // Lưu thay đổi
     } catch(err){
-      if(err && err.code === 11000) return res.status(409).json({ message: 'Trùng bác sĩ/ngày/khung giờ' });
-      throw err;
+      if(err && err.code === 11000) return res.status(409).json({ message: 'Trùng bác sĩ/ngày/khung giờ' }); // Unique index trùng
+      throw err; // Ném lỗi khác
     }
-    res.json({ ok: true, appointment: appt });
-  } catch(err){ return next(err); }
+    res.json({ ok: true, appointment: appt }); // Trả về bản ghi sau chỉnh sửa
+  } catch(err){ return next(err); } // Xử lý lỗi chung
 });
 
 // PUT /api/booking/appointments/:id/reassign { bacSiId, khungGio?, date? }
 // Mô tả: Đổi bác sĩ và/hoặc giờ khám (admin/reception)
 router.put('/appointments/:id/reassign', auth, async (req,res,next)=>{ // Đổi bác sĩ/giờ khám
   try {
-    if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền đổi bác sĩ/giờ' });
-    const { id } = req.params;
-    const { bacSiId, khungGio, date } = req.body || {};
-    if(!bacSiId) return res.status(400).json({ message: 'Thiếu bacSiId mới' });
-    const appt = await LichKham.findById(id);
-    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
-    if(appt.trangThai === 'da_kham') return res.status(400).json({ message: 'Không thể đổi lịch đã khám' });
-    // Validate doctor exists
-    const doctor = await BacSi.findById(bacSiId).select('_id chuyenKhoa');
-    if(!doctor) return res.status(404).json({ message: 'Bác sĩ mới không tồn tại' });
-    appt.bacSiId = doctor._id;
-    if(date){
-      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' });
-      appt.ngayKham = startOfDay(d);
+    if(!['admin','reception'].includes(req.user.role)) return res.status(403).json({ message: 'Không có quyền đổi bác sĩ/giờ' }); // Chỉ admin/quầy
+    const { id } = req.params; // ID lịch cần đổi
+    const { bacSiId, khungGio, date } = req.body || {}; // Bác sĩ mới, khung giờ, ngày
+    if(!bacSiId) return res.status(400).json({ message: 'Thiếu bacSiId mới' }); // Bắt buộc có bác sĩ mới
+    const appt = await LichKham.findById(id); // Tải lịch hiện tại
+    if(!appt) return res.status(404).json({ message: 'Không tìm thấy lịch khám' }); // Không tồn tại
+    if(appt.trangThai === 'da_kham') return res.status(400).json({ message: 'Không thể đổi lịch đã khám' }); // Không đổi nếu đã khám
+    // Kiểm tra bác sĩ tồn tại
+    const doctor = await BacSi.findById(bacSiId).select('_id chuyenKhoa'); // Tải bác sĩ mới
+    if(!doctor) return res.status(404).json({ message: 'Bác sĩ mới không tồn tại' }); // Không tồn tại
+    appt.bacSiId = doctor._id; // Gán bác sĩ mới
+    if(date){ // Nếu đổi ngày
+      const d = new Date(date); if(isNaN(d)) return res.status(400).json({ message: 'date không hợp lệ' }); // Kiểm tra
+      appt.ngayKham = startOfDay(d); // Cập nhật ngày
     }
-    if(khungGio){ appt.khungGio = khungGio; }
+    if(khungGio){ appt.khungGio = khungGio; } // Cập nhật giờ nếu có
     try {
-      await appt.save();
+      await appt.save(); // Lưu
     } catch(err){
-      if(err && err.code === 11000) return res.status(409).json({ message: 'Trùng bác sĩ/ngày/khung giờ' });
-      throw err;
+      if(err && err.code === 11000) return res.status(409).json({ message: 'Trùng bác sĩ/ngày/khung giờ' }); // Xung đột unique
+      throw err; // Ném lỗi khác
     }
-    res.json({ ok: true, appointment: appt });
-  } catch(err){ return next(err); }
+    res.json({ ok: true, appointment: appt }); // Trả về lịch sau khi đổi
+  } catch(err){ return next(err); } // Bắt lỗi
 });
 
 
@@ -664,40 +703,40 @@ router.put('/appointments/:id/reassign', auth, async (req,res,next)=>{ // Đổi
 // DELETE /api/booking/appointments/:id - hủy lịch khám
 router.delete('/appointments/:id', auth, async (req, res, next) => { // Hủy lịch khám (người đặt)
   try{
-    const userId = req.user.id;
+    const userId = req.user.id; // ID người dùng hiện tại
     
-    // Find appointment and verify ownership
-    const appointment = await LichKham.findById(req.params.id);
-    if(!appointment) return res.status(404).json({ message: 'Không tìm thấy lịch khám' });
+    // Tìm lịch và kiểm tra quyền sở hữu
+    const appointment = await LichKham.findById(req.params.id); // Lấy lịch theo id
+    if(!appointment) return res.status(404).json({ message: 'Không tìm thấy lịch khám' }); // Không tồn tại
     
-    if(String(appointment.nguoiDatId) !== String(userId)) {
-      return res.status(403).json({ message: 'Bạn không có quyền hủy lịch khám này' });
+    if(String(appointment.nguoiDatId) !== String(userId)) { // So khớp người đặt và user hiện tại
+      return res.status(403).json({ message: 'Bạn không có quyền hủy lịch khám này' }); // Không phải chủ lịch
     }
     
-    // Check if appointment can be cancelled
-    if(appointment.trangThai === 'da_kham') {
+    // Kiểm tra trạng thái cho phép hủy
+    if(appointment.trangThai === 'da_kham') { // Đã khám thì không hủy
       return res.status(400).json({ message: 'Không thể hủy lịch khám đã hoàn thành' });
     }
     
-    // Check time constraint (e.g., can't cancel within 2 hours of appointment)
-    const appointmentTime = new Date(appointment.ngayKham);
-    const now = new Date();
-    const timeDiff = appointmentTime.getTime() - now.getTime();
-    const hoursDiff = timeDiff / (1000 * 3600);
+    // Ràng buộc thời gian: không hủy trong vòng 2 giờ trước giờ khám
+    const appointmentTime = new Date(appointment.ngayKham); // Mốc thời gian lịch (00:00 của ngày)
+    const now = new Date(); // Hiện tại
+    const timeDiff = appointmentTime.getTime() - now.getTime(); // Chênh lệch ms
+    const hoursDiff = timeDiff / (1000 * 3600); // Đổi sang giờ
     
-    if(hoursDiff < 2 && hoursDiff > 0) {
+    if(hoursDiff < 2 && hoursDiff > 0) { // Trong khoảng 0..2h trước lịch
       return res.status(400).json({ message: 'Không thể hủy lịch khám trong vòng 2 tiếng trước giờ khám' });
     }
     
-    // Delete related queue number if exists
-    await SoThuTu.deleteMany({ lichKhamId: req.params.id });
+    // Xoá số thứ tự liên quan nếu có
+    await SoThuTu.deleteMany({ lichKhamId: req.params.id }); // Xoá STT
     
-    // Delete appointment
-    await LichKham.findByIdAndDelete(req.params.id);
+    // Xoá lịch khám
+    await LichKham.findByIdAndDelete(req.params.id); // Xoá lịch
     
-    res.json({ message: 'Hủy lịch khám thành công' });
+    res.json({ message: 'Hủy lịch khám thành công' }); // Trả thông báo thành công
   }catch(err){
-    return next(err);
+    return next(err); // Bắt lỗi
   }
 });
 
